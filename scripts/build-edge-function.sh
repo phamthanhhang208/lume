@@ -33,6 +33,18 @@ case "$NAME" in
   extract-ingredients)
     MODULES=(cors.ts supabase.ts gemini.ts prompts.ts schemas.ts)
     ;;
+  analyze-skin)
+    MODULES=(cors.ts supabase.ts perfectcorp.ts schemas.ts)
+    ;;
+  analyze-skin-tone)
+    MODULES=(cors.ts supabase.ts perfectcorp.ts schemas.ts)
+    ;;
+  generate-verdict)
+    MODULES=(cors.ts supabase.ts gemini.ts prompts.ts schemas.ts)
+    ;;
+  generate-look)
+    MODULES=(cors.ts supabase.ts gemini.ts perfectcorp.ts prompts.ts schemas.ts)
+    ;;
   *)
     echo "error: unknown function '$NAME' — add its modules to this script" >&2
     exit 1

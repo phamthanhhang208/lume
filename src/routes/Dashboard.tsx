@@ -13,6 +13,8 @@ export default function Dashboard() {
       <h1>dashboard</h1>
       <p>
         <Link to="/products/new">add product</Link>
+        {" · "}
+        <Link to="/scan">analyze my skin</Link>
       </p>
 
       <h2>my collection</h2>
