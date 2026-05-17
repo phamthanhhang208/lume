@@ -238,7 +238,7 @@ The design package in `/design/` contains full React/JSX implementations of ever
 11. Record demo video
 12. Write Devpost submission
 
-**Stretch goal:** Chrome extension. Build only if Phase 6 finishes early.
+**Stretch goal:** Chrome extension. Build only if Phase 6 finishes early. See /docs/chrome-extension.md for the full plan, scope, architecture, and stretch sub-phases.
 
 **Exit criteria:**
 

@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Lume",
+  "version": "0.1.0",
+  "description": "Try beauty products from any site on your own face.",
+  "permissions": ["contextMenus", "sidePanel", "storage", "activeTab"],
+  "host_permissions": ["https://*.supabase.co/*"],
+  "background": {
+    "service_worker": "src/background.ts",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "src/sidepanel/index.html"
+  },
+  "action": {
+    "default_title": "Lume",
+    "default_popup": "src/popup/index.html"
+  }
+}

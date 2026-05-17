@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lume</title>
+    <style>
+      :root {
+        --ink: #1a1a1a;
+        --ink-soft: #6b6b70;
+        --cream: #ffffff;
+        --rose-deep: #e37b8c;
+      }
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--cream);
+        color: var(--ink);
+        font-family: Inter, system-ui, sans-serif;
+        font-size: 14px;
+        line-height: 1.4;
+      }
+      h1 {
+        font-family: "Instrument Serif", serif;
+        font-style: italic;
+        font-size: 28px;
+        margin: 0 0 8px;
+        font-weight: 400;
+      }
+      button {
+        background: var(--rose-deep);
+        color: #fff;
+        border: none;
+        padding: 8px 14px;
+        border-radius: 999px;
+        font-family: Inter, sans-serif;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .muted {
+        color: var(--ink-soft);
+      }
+      .result img {
+        width: 100%;
+        border-radius: 8px;
+        display: block;
+        margin-top: 8px;
+      }
+      .badge {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 999px;
+        background: #f8d5dc;
+        color: #7a3e48;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .alert {
+        background: #f4c8b0;
+        color: #7a381f;
+        padding: 8px 10px;
+        border-radius: 6px;
+        margin-top: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

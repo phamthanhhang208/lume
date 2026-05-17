@@ -45,6 +45,9 @@ case "$NAME" in
   generate-look)
     MODULES=(cors.ts supabase.ts gemini.ts perfectcorp.ts prompts.ts schemas.ts)
     ;;
+  try-from-web)
+    MODULES=(cors.ts supabase.ts gemini.ts perfectcorp.ts)
+    ;;
   *)
     echo "error: unknown function '$NAME' — add its modules to this script" >&2
     exit 1
