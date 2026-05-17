@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 
+import VerdictTag from "@/components/ui/VerdictTag";
 import { useProducts } from "@/features/products/api/useProducts";
 import { useLatestScan } from "@/features/scans/api/useLatestScan";
 import { useLatestVerdicts } from "@/features/verdicts/api/useLatestVerdicts";
@@ -43,7 +44,7 @@ export default function Verdict() {
               <Link to={`/products/${product.id}`}>
                 <strong>{product.name}</strong>
               </Link>{" "}
-              — {verdict ? verdict.verdict : "(not analyzed)"}
+              — {verdict ? <VerdictTag verdict={verdict.verdict} /> : "(not analyzed)"}
               {verdict && <p>{verdict.reasoning}</p>}
             </li>
           ))}
