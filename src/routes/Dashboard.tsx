@@ -2,11 +2,21 @@ import { Link } from "react-router";
 
 import { useProducts } from "@/features/products/api/useProducts";
 import { useStickerUrls } from "@/features/products/api/useStickerUrls";
-import type { Product } from "@/types/database";
+import { useLatestScan } from "@/features/scans/api/useLatestScan";
+import { useGenerateVerdictMutation } from "@/features/verdicts/api/useGenerateVerdictMutation";
+import { useLatestVerdicts } from "@/features/verdicts/api/useLatestVerdicts";
+import type { Product, Verdict } from "@/types/database";
 
 export default function Dashboard() {
   const products = useProducts();
   const stickerUrls = useStickerUrls(products.data);
+  const latestScan = useLatestScan();
+  const latestVerdicts = useLatestVerdicts();
+  const generateVerdict = useGenerateVerdictMutation();
+
+  const hasProducts = (products.data?.length ?? 0) > 0;
+  const hasScan = !!latestScan.data;
+  const canAnalyze = hasProducts && hasScan;
 
   return (
     <main>
@@ -15,7 +25,45 @@ export default function Dashboard() {
         <Link to="/products/new">add product</Link>
         {" · "}
         <Link to="/scan">analyze my skin</Link>
+        {" · "}
+        <Link to="/look">build a look</Link>
       </p>
+
+      <section>
+        <h2>
+          routine verdict — <Link to="/verdict">summary</Link>
+        </h2>
+        {!canAnalyze && (
+          <p>
+            {!hasScan && (
+              <>
+                you need at least one skin scan.{" "}
+                <Link to="/scan">analyze my skin</Link>.{" "}
+              </>
+            )}
+            {!hasProducts && (
+              <>
+                you need at least one product.{" "}
+                <Link to="/products/new">add a product</Link>.
+              </>
+            )}
+          </p>
+        )}
+        <p>
+          <button
+            type="button"
+            onClick={() => generateVerdict.mutate()}
+            disabled={!canAnalyze || generateVerdict.isPending}
+          >
+            {generateVerdict.isPending
+              ? "analyzing routine…"
+              : "analyze my routine"}
+          </button>
+        </p>
+        {generateVerdict.error && (
+          <p role="alert">error: {generateVerdict.error.message}</p>
+        )}
+      </section>
 
       <h2>my collection</h2>
       {products.isPending && <p>loading…</p>}
@@ -30,6 +78,7 @@ export default function Dashboard() {
               key={product.id}
               product={product}
               stickerUrl={stickerUrls.data?.[product.sticker_image_url]}
+              verdict={latestVerdicts.data?.byProductId[product.id]}
             />
           ))}
         </ul>
@@ -41,9 +90,10 @@ export default function Dashboard() {
 interface ProductCardProps {
   product: Product;
   stickerUrl: string | undefined;
+  verdict: Verdict | undefined;
 }
 
-function ProductCard({ product, stickerUrl }: ProductCardProps) {
+function ProductCard({ product, stickerUrl, verdict }: ProductCardProps) {
   return (
     <li>
       <Link to={`/products/${product.id}`}>
@@ -56,6 +106,7 @@ function ProductCard({ product, stickerUrl }: ProductCardProps) {
           {product.category}
           {product.subcategory && ` · ${product.subcategory}`}
         </div>
+        {verdict && <div>verdict: <strong>{verdict.verdict}</strong></div>}
       </Link>
     </li>
   );
