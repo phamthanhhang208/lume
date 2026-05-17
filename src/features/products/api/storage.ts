@@ -41,3 +41,20 @@ export async function createSignedUrl(storagePath: string): Promise<string> {
   if (error || !data) throw error ?? new Error("no signed url");
   return data.signedUrl;
 }
+
+export async function createSignedUrls(
+  storagePaths: string[],
+): Promise<Record<string, string>> {
+  if (storagePaths.length === 0) return {};
+  const { data, error } = await supabase.storage
+    .from(BUCKET)
+    .createSignedUrls(storagePaths, SIGNED_URL_TTL);
+  if (error || !data) throw error ?? new Error("no signed urls");
+  return Object.fromEntries(
+    data
+      .filter((entry): entry is typeof entry & { path: string; signedUrl: string } =>
+        typeof entry.path === "string" && typeof entry.signedUrl === "string",
+      )
+      .map((entry) => [entry.path, entry.signedUrl]),
+  );
+}
