@@ -2,6 +2,8 @@ import { useEffect } from "react";
 import { Outlet, useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 
+import TopNav from "@/components/ui/TopNav";
+
 import { supabase } from "@/lib/supabase";
 import { sessionKeys } from "@/features/auth/api/sessionKeys";
 
@@ -21,5 +23,12 @@ export default function RootLayout() {
     return () => subscription.unsubscribe();
   }, [queryClient, navigate]);
 
-  return <Outlet />;
+  return (
+    <div className="min-h-svh bg-cream">
+      <TopNav />
+      <div className="relative mx-auto max-w-sm lg:max-w-none">
+        <Outlet />
+      </div>
+    </div>
+  );
 }
