@@ -42,6 +42,7 @@ Jen — frontend engineer with 3+ years experience. Comfortable with React, Type
 5. `/docs/conventions.md` — code style, naming, file organization
 6. `/docs/phases.md` — phased build plan with exit criteria per phase
 7. `/docs/design-system.md` — how to use the design package in `/design/` (read when starting visual work)
+8. `/docs/chrome-extension.md` — Chrome extension planning (read only if/when starting stretch phase)
 
 If something in these docs conflicts with what Jen says in chat, ask which is authoritative.
 
