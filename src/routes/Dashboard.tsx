@@ -1,5 +1,7 @@
 import { Link } from "react-router";
 
+import LumeMark from "@/components/ui/LumeMark";
+import VerdictTag from "@/components/ui/VerdictTag";
 import { useProducts } from "@/features/products/api/useProducts";
 import { useStickerUrls } from "@/features/products/api/useStickerUrls";
 import { useLatestScan } from "@/features/scans/api/useLatestScan";
@@ -20,7 +22,10 @@ export default function Dashboard() {
 
   return (
     <main>
-      <h1>dashboard</h1>
+      <header>
+        <LumeMark size={36} />
+        <h1>dashboard</h1>
+      </header>
       <p>
         <Link to="/products/new">add product</Link>
         {" · "}
@@ -106,7 +111,7 @@ function ProductCard({ product, stickerUrl, verdict }: ProductCardProps) {
           {product.category}
           {product.subcategory && ` · ${product.subcategory}`}
         </div>
-        {verdict && <div>verdict: <strong>{verdict.verdict}</strong></div>}
+        {verdict && <div><VerdictTag verdict={verdict.verdict} /></div>}
       </Link>
     </li>
   );

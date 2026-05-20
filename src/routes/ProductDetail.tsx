@@ -1,5 +1,6 @@
 import { Link, useParams } from "react-router";
 
+import VerdictTag from "@/components/ui/VerdictTag";
 import { useProduct } from "@/features/products/api/useProduct";
 import { useStickerUrls } from "@/features/products/api/useStickerUrls";
 import { useLatestVerdicts } from "@/features/verdicts/api/useLatestVerdicts";
@@ -38,7 +39,7 @@ export default function ProductDetail() {
 
           {verdict && (
             <section>
-              <h2>latest verdict: {verdict.verdict}</h2>
+              <h2>latest verdict <VerdictTag verdict={verdict.verdict} /></h2>
               <p>{verdict.reasoning}</p>
             </section>
           )}

@@ -1,1 +1,69 @@
 @import "tailwindcss";
+
+@theme {
+  /* ---- Colors lifted from design/lume-shared.jsx (LUME palette) ---- */
+  --color-cream: #ffffff;
+  --color-cream-deep: #fbf6f4;
+  --color-paper: #ffffff;
+  --color-ink: #1a1a1a;
+  --color-ink-soft: #6b6b70;
+  --color-ink-faint: #b0b0b5;
+
+  --color-terracotta: #fbc9a5;
+  --color-terracotta-deep: #e37b8c;
+  --color-sage: #c5ddc9;
+  --color-sage-deep: #7cb89c;
+  --color-rose: #f8d5dc;
+  --color-rose-deep: #e37b8c;
+  --color-rose-pale: #fce4e8;
+  --color-ochre: #fce3a4;
+  --color-ochre-deep: #e5c56a;
+  --color-lilac: #d6bce7;
+  --color-lilac-deep: #9c72b5;
+  --color-sky: #bfdaef;
+  --color-sky-deep: #7aa8c8;
+  --color-yellow: #ffec4d;
+  --color-yellow-deep: #e5c800;
+
+  /* iMessage-style chat bubbles */
+  --color-im-sent: #e37b8c;
+  --color-im-received: #e5e5ea;
+
+  /* Verdict semantic palette (chip variant from design) */
+  --color-verdict-works-bg: #d6e4cc;
+  --color-verdict-works-fg: #2f4823;
+  --color-verdict-works-border: #7a9670;
+  --color-verdict-neutral-bg: #fbe9b2;
+  --color-verdict-neutral-fg: #7a5f1e;
+  --color-verdict-neutral-border: #d9b848;
+  --color-verdict-skip-bg: #f4c8b0;
+  --color-verdict-skip-fg: #7a381f;
+  --color-verdict-skip-border: #d89c68;
+
+  /* ---- Typography ---- */
+  --font-serif: "Instrument Serif", "Times New Roman", serif;
+  --font-display: "Instrument Serif", "Times New Roman", serif;
+  --font-hand: "Caveat", cursive;
+  --font-mono: "Courier Prime", ui-monospace, monospace;
+  --font-sans: "Inter", system-ui, sans-serif;
+}
+
+html,
+body {
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+  font-weight: 400;
+}
+
+h1 {
+  font-style: italic;
+}
