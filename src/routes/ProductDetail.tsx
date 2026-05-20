@@ -2,11 +2,14 @@ import { Link, useParams } from "react-router";
 
 import { useProduct } from "@/features/products/api/useProduct";
 import { useStickerUrls } from "@/features/products/api/useStickerUrls";
+import { useLatestVerdicts } from "@/features/verdicts/api/useLatestVerdicts";
 
 export default function ProductDetail() {
   const { id } = useParams<{ id: string }>();
   const product = useProduct(id);
   const stickerUrls = useStickerUrls(product.data ? [product.data] : undefined);
+  const verdicts = useLatestVerdicts();
+  const verdict = id ? verdicts.data?.byProductId[id] : undefined;
 
   return (
     <main>
@@ -31,6 +34,13 @@ export default function ProductDetail() {
               src={stickerUrls.data[product.data.sticker_image_url]}
               alt={product.data.name}
             />
+          )}
+
+          {verdict && (
+            <section>
+              <h2>latest verdict: {verdict.verdict}</h2>
+              <p>{verdict.reasoning}</p>
+            </section>
           )}
 
           <h2>ingredients ({product.data.ingredients.length})</h2>

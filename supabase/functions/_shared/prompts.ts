@@ -12,3 +12,132 @@ export function ingredientOcrPromptStricter(): string {
 
 Photo: back of a beauty product. Return the printed ingredients list, in order, exactly as printed. Each ingredient is one string. Do not invent or normalize.`;
 }
+
+interface VerdictProductCtx {
+  id: string;
+  name: string;
+  brand: string | null;
+  category: string;
+  subcategory: string | null;
+  ingredients: string[];
+}
+
+function formatMetrics(metrics: Record<string, number>): string {
+  return Object.entries(metrics)
+    .map(([key, value]) => `  ${key}: ${value}`)
+    .join("\n");
+}
+
+function formatProducts(products: VerdictProductCtx[]): string {
+  return products
+    .map((product) => {
+      const head = `- id: ${product.id}\n  name: ${product.name}${
+        product.brand ? ` (${product.brand})` : ""
+      }`;
+      const cat = `\n  category: ${product.category}${
+        product.subcategory ? ` / ${product.subcategory}` : ""
+      }`;
+      const ing =
+        product.ingredients.length > 0
+          ? `\n  ingredients: ${product.ingredients.slice(0, 25).join(", ")}`
+          : "";
+      return head + cat + ing;
+    })
+    .join("\n");
+}
+
+export function verdictPrompt(
+  metrics: Record<string, number>,
+  products: VerdictProductCtx[],
+): string {
+  return `You are a skincare expert. Given a user's skin analysis and a list of products,
+identify which products are working for them, which are neutral, and which they
+should consider dropping.
+
+SKIN METRICS (scores 0-100; higher is generally better):
+${formatMetrics(metrics)}
+
+PRODUCTS:
+${formatProducts(products)}
+
+Return a JSON array. Each item MUST be {"product_id": <id>, "verdict": "works"|"neutral"|"skip", "reasoning": <1-2 sentences>}.
+- Anchor each reasoning to a specific metric or ingredient.
+- If a product targets a concern the user does not have based on their metrics, mark it "skip".
+- If it directly addresses a low-scoring metric, mark it "works".
+- Otherwise "neutral".
+- Include EVERY product_id from PRODUCTS exactly once. Do not invent product_ids.`;
+}
+
+export function verdictPromptStricter(
+  metrics: Record<string, number>,
+  products: VerdictProductCtx[],
+): string {
+  return `Return ONLY a JSON array. No prose, no markdown, no wrapper object.
+Each element MUST have keys product_id (string), verdict (one of "works"|"neutral"|"skip"), reasoning (string).
+Include one entry per product_id listed below, in the same order.
+
+METRICS:
+${formatMetrics(metrics)}
+
+PRODUCTS:
+${formatProducts(products)}`;
+}
+
+interface LookProductCtx {
+  id: string;
+  name: string;
+  brand: string | null;
+  subcategory: string | null;
+}
+
+function formatLookProducts(products: LookProductCtx[]): string {
+  return products
+    .map(
+      (product) =>
+        `- id: ${product.id} | ${product.subcategory ?? "?"} | ${product.name}${
+          product.brand ? ` (${product.brand})` : ""
+        }`,
+    )
+    .join("\n");
+}
+
+export function lookPrompt(
+  userPrompt: string,
+  products: LookProductCtx[],
+  validSlots: readonly string[],
+): string {
+  return `You are a makeup artist. Pick a subset of the user's owned makeup products that
+fits the look they describe. Assign each picked product to a single slot.
+
+USER PROMPT: ${userPrompt}
+
+OWNED MAKEUP PRODUCTS:
+${formatLookProducts(products)}
+
+VALID SLOTS: ${validSlots.join(", ")}
+
+Return a JSON object with:
+- products: array of {"product_id": <id>, "slot": <one of VALID SLOTS>}
+- reasoning: 1-3 sentences on why these picks fit the look
+- gaps: array of slot names that the user doesn't own a good product for
+
+Rules:
+- Only use product_ids from OWNED MAKEUP PRODUCTS.
+- Each slot appears at most once across products[].
+- Prefer products whose subcategory naturally matches the slot.
+- If nothing matches, return an empty products array with gaps explaining what's missing.`;
+}
+
+export function lookPromptStricter(
+  userPrompt: string,
+  products: LookProductCtx[],
+  validSlots: readonly string[],
+): string {
+  return `Return ONLY a JSON object: {"products":[{"product_id":string,"slot":string}],"reasoning":string,"gaps":string[]}.
+slot MUST be one of: ${validSlots.join(", ")}. product_id MUST come from the list below.
+
+USER PROMPT: ${userPrompt}
+
+PRODUCTS:
+${formatLookProducts(products)}`;
+}
