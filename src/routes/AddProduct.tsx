@@ -1,36 +1,153 @@
+import { useCallback } from "react";
 import { useNavigate } from "react-router";
 
 import { useAuth } from "@/features/auth/api/useAuth";
 import BackStep from "@/features/products/components/BackStep";
 import CategoryStep from "@/features/products/components/CategoryStep";
-import DetailsStep from "@/features/products/components/DetailsStep";
 import FrontStep from "@/features/products/components/FrontStep";
+import PreviewStep from "@/features/products/components/PreviewStep";
+import { useProcessBackPhotoMutation } from "@/features/products/api/useProcessBackPhotoMutation";
+import { useProcessFrontPhotoMutation } from "@/features/products/api/useProcessFrontPhotoMutation";
 import { useDraftProductStore } from "@/stores/useDraftProductStore";
 
-const STEPS = ["category", "front", "back", "details"] as const;
+const STEPS = ["category", "front", "back", "preview"] as const;
 
 export default function AddProduct() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { step, reset } = useDraftProductStore();
+  const step = useDraftProductStore((s) => s.step);
+  const reset = useDraftProductStore((s) => s.reset);
+
+  const processFront = useProcessFrontPhotoMutation();
+  const processBack = useProcessBackPhotoMutation();
+
+  const onFrontConfirmed = useCallback(
+    (blob: Blob) => {
+      if (!user) return;
+      const state = useDraftProductStore.getState();
+      if (!state.category) return;
+      const productId = state.ensureProductId();
+      const generation = state.frontProcessingGeneration + 1;
+      useDraftProductStore.setState({
+        frontProcessingStatus: "pending",
+        frontProcessingGeneration: generation,
+      });
+      // Advance immediately so the user can move on while processing runs.
+      useDraftProductStore.getState().setStep("back");
+      processFront.mutate(
+        { userId: user.id, productId, category: state.category, blob },
+        {
+          onSuccess: (result) => {
+            if (
+              useDraftProductStore.getState().frontProcessingGeneration !==
+              generation
+            ) {
+              return;
+            }
+            useDraftProductStore.setState((s) => ({
+              originalStoragePath: result.originalStoragePath,
+              stickerStoragePath: result.stickerStoragePath,
+              // Don't clobber anything the user has already typed in preview
+              // while we were still extracting.
+              name: s.name === "" && result.name ? result.name : s.name,
+              brand: s.brand === "" && result.brand ? result.brand : s.brand,
+              subcategory:
+                s.subcategory === "" && result.subcategory
+                  ? result.subcategory
+                  : s.subcategory,
+              shade: s.shade === "" && result.shade ? result.shade : s.shade,
+              frontProcessingStatus: "done",
+            }));
+          },
+          onError: () => {
+            if (
+              useDraftProductStore.getState().frontProcessingGeneration !==
+              generation
+            ) {
+              return;
+            }
+            useDraftProductStore.setState({ frontProcessingStatus: "error" });
+          },
+        },
+      );
+    },
+    [user, processFront],
+  );
+
+  const onBackConfirmed = useCallback(
+    (blob: Blob) => {
+      if (!user) return;
+      const state = useDraftProductStore.getState();
+      const productId = state.ensureProductId();
+      const generation = state.backProcessingGeneration + 1;
+      useDraftProductStore.setState({
+        backProcessingStatus: "pending",
+        backProcessingGeneration: generation,
+      });
+      useDraftProductStore.getState().setStep("preview");
+      processBack.mutate(
+        { userId: user.id, productId, blob },
+        {
+          onSuccess: (result) => {
+            if (
+              useDraftProductStore.getState().backProcessingGeneration !==
+              generation
+            ) {
+              return;
+            }
+            useDraftProductStore.setState((s) => ({
+              backStoragePath: result.backStoragePath,
+              // If user has already edited ingredients in preview while OCR ran,
+              // keep their list.
+              ingredients:
+                s.ingredients.length === 0 ? result.ingredients : s.ingredients,
+              backProcessingStatus: "done",
+            }));
+          },
+          onError: () => {
+            if (
+              useDraftProductStore.getState().backProcessingGeneration !==
+              generation
+            ) {
+              return;
+            }
+            useDraftProductStore.setState({ backProcessingStatus: "error" });
+          },
+        },
+      );
+    },
+    [user, processBack],
+  );
+
+  const onBackSkip = useCallback(() => {
+    useDraftProductStore.setState((s) => ({
+      backStoragePath: null,
+      ingredients: s.ingredients.length === 0 ? [] : s.ingredients,
+      backProcessingStatus: "done",
+      backProcessingGeneration: s.backProcessingGeneration + 1,
+    }));
+    useDraftProductStore.getState().setStep("preview");
+  }, []);
 
   if (!user) return null;
 
-  const stepIndex = STEPS.indexOf(step as typeof STEPS[number]);
-  const stepLabel = stepIndex >= 0 ? `step ${stepIndex + 1} of 4 · add product` : "add product";
+  const stepIndex = STEPS.indexOf(step as (typeof STEPS)[number]);
+  const stepLabel =
+    stepIndex >= 0 ? `step ${stepIndex + 1} of 4 · add product` : "add product";
 
   const stepTitles: Record<string, string> = {
     category: "what kind of product?",
     front: "snap the front",
     back: "now the back",
-    details: "ingredients caught",
+    preview: "preview & edit",
   };
 
   const stepSubs: Record<string, string> = {
     category: "skincare, makeup, or both?",
-    front: "we'll cut out the background and turn it into a sticker. hold steady.",
-    back: "we read the ingredient list so verdict knows what's in there.",
-    details: "let's verify what we found.",
+    front:
+      "we'll cut out the background and read the name + brand off the package.",
+    back: "we read the ingredient list so verdict knows what's in there. skip if you don't have it.",
+    preview: "we filled in what we read. edit anything that looks off.",
   };
 
   const onCancel = () => {
@@ -91,9 +208,11 @@ export default function AddProduct() {
 
       <div className="px-4 lg:mx-auto lg:w-full lg:max-w-2xl lg:px-5">
         {step === "category" && <CategoryStep />}
-        {step === "front" && <FrontStep userId={user.id} />}
-        {step === "back" && <BackStep userId={user.id} />}
-        {step === "details" && <DetailsStep userId={user.id} onSaved={onSaved} />}
+        {step === "front" && <FrontStep onConfirm={onFrontConfirmed} />}
+        {step === "back" && (
+          <BackStep onConfirm={onBackConfirmed} onSkip={onBackSkip} />
+        )}
+        {step === "preview" && <PreviewStep userId={user.id} onSaved={onSaved} />}
 
         <div className="mt-4">
           <button

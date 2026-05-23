@@ -7,10 +7,24 @@ export const storagePathBody = z.object({
 });
 export type StoragePathBody = z.infer<typeof storagePathBody>;
 
+export const frontInfoBody = z.object({
+  storage_path: z.string().min(1),
+  category: z.enum(["makeup", "skincare"]),
+});
+export type FrontInfoBody = z.infer<typeof frontInfoBody>;
+
 // ---------- AI response shapes ----------
 
 export const ingredientList = z.array(z.string());
 export type IngredientList = z.infer<typeof ingredientList>;
+
+export const frontInfo = z.object({
+  name: z.string().nullable(),
+  brand: z.string().nullable(),
+  subcategory: z.string().nullable(),
+  shade: z.string().nullable(),
+});
+export type FrontInfo = z.infer<typeof frontInfo>;
 
 export const verdictItem = z.object({
   product_id: z.string().uuid(),

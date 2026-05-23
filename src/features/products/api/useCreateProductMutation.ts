@@ -11,9 +11,9 @@ export interface CreateProductInput {
   subcategory: string | null;
   name: string;
   brand: string | null;
+  shade: string | null;
   originalStoragePath: string;
   stickerStoragePath: string;
-  backStoragePath: string;
   ingredients: string[];
 }
 
@@ -31,6 +31,7 @@ export function useCreateProductMutation() {
           brand: input.brand,
           category: input.category,
           subcategory: input.subcategory,
+          shade: input.shade,
           original_image_url: input.originalStoragePath,
           sticker_image_url: input.stickerStoragePath,
           ingredients: input.ingredients,

@@ -18,6 +18,7 @@ export interface Product {
   brand: string | null;
   category: ProductCategory;
   subcategory: string | null;
+  shade: string | null;
   sticker_image_url: string;
   original_image_url: string;
   ingredients: string[];

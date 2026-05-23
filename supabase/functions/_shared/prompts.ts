@@ -13,6 +13,62 @@ export function ingredientOcrPromptStricter(): string {
 Photo: back of a beauty product. Return the printed ingredients list, in order, exactly as printed. Each ingredient is one string. Do not invent or normalize.`;
 }
 
+// Kept in sync with src/features/products/utils/subcategories.ts.
+// Edge runtime can't import TS path aliases, so the lists are duplicated here.
+const MAKEUP_SUBCATEGORIES = [
+  "foundation",
+  "concealer",
+  "blush",
+  "bronzer",
+  "contour",
+  "highlighter",
+  "lipstick",
+  "lip liner",
+  "eyeshadow",
+  "eyeliner",
+  "eyelash",
+  "eyebrow",
+];
+
+const SKINCARE_SUBCATEGORIES = [
+  "cleanser",
+  "toner",
+  "serum",
+  "moisturizer",
+  "eye cream",
+  "sunscreen",
+  "mask",
+  "exfoliant",
+  "treatment",
+];
+
+export function frontInfoPrompt(category: "makeup" | "skincare"): string {
+  const subs =
+    category === "makeup" ? MAKEUP_SUBCATEGORIES : SKINCARE_SUBCATEGORIES;
+  return `You are looking at the FRONT of a ${category} product package. Extract what is printed.
+
+Return JSON with these keys:
+- name: full product name as printed (e.g. "Moisturizing Cream", "Cherry Bomb Lipstick"). Null if not readable.
+- brand: brand name only, no taglines (e.g. "CeraVe", "MAC", "The Ordinary"). Null if not visible.
+- subcategory: exactly ONE of these strings, lowercase: ${subs.join(", ")}. Null if none clearly fit.
+- shade: color or shade name if printed (e.g. "Rose Petal", "Medium 23", "01 Beige"). Null otherwise. Usually only on makeup.
+
+Rules:
+- Return null for any field you cannot read with high confidence. Do not guess.
+- subcategory must be one of the listed values verbatim, or null.
+- Do not include any field other than name, brand, subcategory, shade.`;
+}
+
+export function frontInfoPromptStricter(category: "makeup" | "skincare"): string {
+  const subs =
+    category === "makeup" ? MAKEUP_SUBCATEGORIES : SKINCARE_SUBCATEGORIES;
+  return `Return ONLY a JSON object with exactly these keys: name, brand, subcategory, shade. Each value is either a string or null. No prose, no markdown.
+
+subcategory MUST be one of: ${subs.join(", ")}, or null.
+
+Photo: front of a ${category} product. Read the package; do not invent or guess. Null beats a wrong answer.`;
+}
+
 interface VerdictProductCtx {
   id: string;
   name: string;

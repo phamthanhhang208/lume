@@ -5,37 +5,34 @@ import { useCreateProductMutation } from "@/features/products/api/useCreateProdu
 import { subcategoriesFor } from "@/features/products/utils/subcategories";
 import { useDraftProductStore } from "@/stores/useDraftProductStore";
 
-interface DetailsStepProps {
+interface PreviewStepProps {
   userId: string;
   onSaved: () => void;
 }
 
-export default function DetailsStep({ userId, onSaved }: DetailsStepProps) {
+export default function PreviewStep({ userId, onSaved }: PreviewStepProps) {
   const {
     category,
     productId,
     originalStoragePath,
     stickerStoragePath,
-    backStoragePath,
     ingredients,
     name,
     brand,
     subcategory,
+    shade,
+    frontProcessingStatus,
+    backProcessingStatus,
     setName,
     setBrand,
     setSubcategory,
+    setShade,
     setIngredients,
     setStep,
   } = useDraftProductStore();
   const createProduct = useCreateProductMutation();
 
-  if (
-    !category ||
-    !productId ||
-    !originalStoragePath ||
-    !stickerStoragePath ||
-    !backStoragePath
-  ) {
+  if (!category || !productId || !originalStoragePath || !stickerStoragePath) {
     return (
       <section>
         <p>missing required data. start over.</p>
@@ -47,6 +44,9 @@ export default function DetailsStep({ userId, onSaved }: DetailsStepProps) {
   }
 
   const options = subcategoriesFor(category);
+  const frontPending = frontProcessingStatus === "pending";
+  const backPending = backProcessingStatus === "pending";
+  const stillProcessing = frontPending || backPending;
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -58,9 +58,9 @@ export default function DetailsStep({ userId, onSaved }: DetailsStepProps) {
         subcategory: subcategory || null,
         name,
         brand: brand || null,
+        shade: shade || null,
         originalStoragePath,
         stickerStoragePath,
-        backStoragePath,
         ingredients,
       },
       { onSuccess: onSaved },
@@ -69,7 +69,8 @@ export default function DetailsStep({ userId, onSaved }: DetailsStepProps) {
 
   return (
     <section>
-      <h2>step 4: details</h2>
+      <h2>step 4: preview &amp; edit</h2>
+      <p>review what we read off the photos. edit anything that looks off, then save.</p>
       <form onSubmit={onSubmit}>
         <p>
           <label>
@@ -80,7 +81,9 @@ export default function DetailsStep({ userId, onSaved }: DetailsStepProps) {
               value={name}
               onChange={(event) => setName(event.target.value)}
               disabled={createProduct.isPending}
+              placeholder={frontPending ? "reading..." : "product name"}
             />
+            {frontPending && <span aria-busy="true"> reading...</span>}
           </label>
         </p>
         <p>
@@ -91,7 +94,9 @@ export default function DetailsStep({ userId, onSaved }: DetailsStepProps) {
               value={brand}
               onChange={(event) => setBrand(event.target.value)}
               disabled={createProduct.isPending}
+              placeholder={frontPending ? "reading..." : "brand name"}
             />
+            {frontPending && <span aria-busy="true"> reading...</span>}
           </label>
         </p>
         <p>
@@ -109,13 +114,31 @@ export default function DetailsStep({ userId, onSaved }: DetailsStepProps) {
                 </option>
               ))}
             </select>
+            {frontPending && <span aria-busy="true"> reading...</span>}
           </label>
         </p>
-        <IngredientList
-          ingredients={ingredients}
-          onChange={setIngredients}
-          disabled={createProduct.isPending}
-        />
+        <p>
+          <label>
+            shade{" "}
+            <input
+              type="text"
+              value={shade}
+              onChange={(event) => setShade(event.target.value)}
+              disabled={createProduct.isPending}
+              placeholder={frontPending ? "reading..." : "(optional) color or shade"}
+            />
+            {frontPending && <span aria-busy="true"> reading...</span>}
+          </label>
+        </p>
+        {backPending ? (
+          <p aria-busy="true">reading ingredients...</p>
+        ) : (
+          <IngredientList
+            ingredients={ingredients}
+            onChange={setIngredients}
+            disabled={createProduct.isPending}
+          />
+        )}
         <p>
           <button
             type="button"
@@ -124,8 +147,15 @@ export default function DetailsStep({ userId, onSaved }: DetailsStepProps) {
           >
             back
           </button>{" "}
-          <button type="submit" disabled={createProduct.isPending || !name}>
-            {createProduct.isPending ? "saving..." : "save"}
+          <button
+            type="submit"
+            disabled={createProduct.isPending || !name || stillProcessing}
+          >
+            {createProduct.isPending
+              ? "saving..."
+              : stillProcessing
+                ? "still processing..."
+                : "save"}
           </button>
         </p>
         {createProduct.error && (
