@@ -50,6 +50,7 @@ export interface Scan {
   skin_age: number;
   overall_score: number;
   raw_response: unknown;
+  simulation_image_url: string | null;
   created_at: string;
 }
 
