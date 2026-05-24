@@ -87,9 +87,18 @@ export default function PreviewStep({ userId, onSaved }: PreviewStepProps) {
 
   if (!category || !productId || !originalStoragePath || !stickerStoragePath) {
     return (
-      <section>
-        <p>missing required data. start over.</p>
-        <button type="button" onClick={() => setStep("category")}>
+      <section className="rounded-2xl border border-dashed border-rose bg-rose-pale/40 px-5 py-6 text-center">
+        <p className="font-hand text-xl font-semibold text-ink">
+          missing data
+        </p>
+        <p className="mt-1 font-sans text-xs text-ink-soft">
+          something dropped along the way. start over from the top.
+        </p>
+        <button
+          type="button"
+          onClick={() => setStep("category")}
+          className="mt-4 rounded-full border border-black/25 bg-transparent px-5 py-2.5 font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink"
+        >
           back to start
         </button>
       </section>
@@ -99,8 +108,19 @@ export default function PreviewStep({ userId, onSaved }: PreviewStepProps) {
   const options = subcategoriesFor(category);
   const frontPending = frontProcessingStatus === "pending";
   const backPending = backProcessingStatus === "pending";
+  const frontError = frontProcessingStatus === "error";
+  const backError = backProcessingStatus === "error";
   const searching = searchIngredients.isPending;
   const stillProcessing = frontPending || backPending || searching;
+  const saveDisabled = createProduct.isPending || !name || stillProcessing;
+
+  const processingLabel = frontPending
+    ? "reading the front of the product…"
+    : backPending
+      ? "reading the ingredients on the back…"
+      : searching
+        ? "looking up ingredients online…"
+        : null;
 
   const showSourceCaption =
     (ingredientSource === "openbeautyfacts" || ingredientSource === "gemini") &&
@@ -131,70 +151,105 @@ export default function PreviewStep({ userId, onSaved }: PreviewStepProps) {
   };
 
   return (
-    <section>
-      <h2>step 4: preview &amp; edit</h2>
-      <p>review what we read off the photos. edit anything that looks off, then save.</p>
-      <form onSubmit={onSubmit}>
-        <p>
-          <label>
-            name{" "}
-            <input
-              type="text"
-              required
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              disabled={createProduct.isPending}
-              placeholder={frontPending ? "reading..." : "product name"}
-            />
-            {frontPending && <span aria-busy="true"> reading...</span>}
-          </label>
-        </p>
-        <p>
-          <label>
-            brand{" "}
-            <input
-              type="text"
-              value={brand}
-              onChange={(event) => setBrand(event.target.value)}
-              disabled={createProduct.isPending}
-              placeholder={frontPending ? "reading..." : "brand name"}
-            />
-            {frontPending && <span aria-busy="true"> reading...</span>}
-          </label>
-        </p>
-        <p>
-          <label>
-            subcategory{" "}
-            <select
-              value={subcategory}
-              onChange={(event) => setSubcategory(event.target.value)}
-              disabled={createProduct.isPending}
-            >
-              <option value="">— pick one —</option>
-              {options.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-            {frontPending && <span aria-busy="true"> reading...</span>}
-          </label>
-        </p>
-        <p>
-          <label>
-            shade{" "}
-            <input
-              type="text"
-              value={shade}
-              onChange={(event) => setShade(event.target.value)}
-              disabled={createProduct.isPending}
-              placeholder={frontPending ? "reading..." : "(optional) color or shade"}
-            />
-            {frontPending && <span aria-busy="true"> reading...</span>}
-          </label>
-        </p>
+    <form onSubmit={onSubmit} className="flex flex-col gap-4">
+      {/* Status banner */}
+      {processingLabel && (
+        <div
+          className="flex items-center gap-3 rounded-xl border border-black/[0.08] bg-white px-4 py-3"
+          style={{ boxShadow: "0 1px 3px rgba(20,18,14,.05)" }}
+        >
+          <span className="relative inline-flex h-2.5 w-2.5 shrink-0">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-terracotta-deep opacity-60" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-terracotta-deep" />
+          </span>
+          <div className="flex-1 min-w-0">
+            <div className="font-hand text-lg font-semibold leading-tight text-ink">
+              {processingLabel}
+            </div>
+            <p className="font-sans text-[11px] text-ink-soft">
+              fields will auto-fill when done · you can edit anything below
+            </p>
+          </div>
+        </div>
+      )}
+
+      {(frontError || backError) && (
+        <div
+          role="alert"
+          className="rounded-xl border border-rose bg-rose-pale px-4 py-3"
+        >
+          <div className="font-hand text-base font-semibold text-rose-deep">
+            {frontError && backError
+              ? "we couldn't read either photo"
+              : frontError
+                ? "we couldn't read the front of the product"
+                : "we couldn't read the ingredients on the back"}
+          </div>
+          <p className="mt-0.5 font-sans text-[11px] leading-relaxed text-ink-soft">
+            no worries — type the fields below by hand and tap save.
+          </p>
+        </div>
+      )}
+
+      {/* Product card with fields */}
+      <div
+        className="rounded-2xl border border-black/[0.10] bg-white p-4"
+        style={{
+          boxShadow:
+            "0 1px 3px rgba(20,18,14,.06), 0 4px 14px rgba(20,18,14,.06)",
+        }}
+      >
+        <Field
+          label="name"
+          required
+          pending={frontPending}
+          value={name}
+          onChange={setName}
+          placeholder={frontPending ? "reading…" : "product name"}
+          disabled={createProduct.isPending}
+        />
+        <Field
+          label="brand"
+          pending={frontPending}
+          value={brand}
+          onChange={setBrand}
+          placeholder={frontPending ? "reading…" : "brand name"}
+          disabled={createProduct.isPending}
+        />
+        <SelectField
+          label="subcategory"
+          pending={frontPending}
+          value={subcategory}
+          onChange={setSubcategory}
+          options={options}
+          disabled={createProduct.isPending}
+        />
+        <Field
+          label="shade"
+          pending={frontPending}
+          value={shade}
+          onChange={setShade}
+          placeholder={frontPending ? "reading…" : "(optional) color or shade"}
+          disabled={createProduct.isPending}
+          last
+        />
+      </div>
+
+      {/* Ingredients */}
+      <div
+        className="rounded-2xl border border-black/[0.10] bg-white p-4"
+        style={{
+          boxShadow:
+            "0 1px 3px rgba(20,18,14,.06), 0 4px 14px rgba(20,18,14,.06)",
+        }}
+      >
         {backPending ? (
-          <p aria-busy="true">reading ingredients...</p>
+          <div className="flex items-center gap-2.5">
+            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-terracotta-deep" />
+            <p className="font-sans text-xs text-ink-soft" aria-busy="true">
+              reading ingredients from the back…
+            </p>
+          </div>
         ) : (
           <>
             <IngredientList
@@ -203,74 +258,183 @@ export default function PreviewStep({ userId, onSaved }: PreviewStepProps) {
               disabled={createProduct.isPending}
             />
             {searching && (
-              <p aria-busy="true">searching online for ingredients...</p>
-            )}
-            {showSearchButton && (
-              <p>
-                <button
-                  type="button"
-                  onClick={() => runSearch(true)}
-                  disabled={createProduct.isPending}
-                >
-                  search online
-                </button>
+              <p
+                className="mt-3 flex items-center gap-2 font-sans text-xs text-ink-soft"
+                aria-busy="true"
+              >
+                <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-terracotta-deep" />
+                searching online for ingredients…
               </p>
             )}
+            {showSearchButton && (
+              <button
+                type="button"
+                onClick={() => runSearch(true)}
+                disabled={createProduct.isPending}
+                className="mt-3 rounded-full border border-black/25 bg-transparent px-4 py-2 font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-ink disabled:opacity-40"
+              >
+                search online
+              </button>
+            )}
             {showSourceCaption && (
-              <p>
-                <small>
-                  source:{" "}
-                  {ingredientSource === "openbeautyfacts"
-                    ? "openbeautyfacts.org"
-                    : "web search"}
-                  {ingredientSourceUrl && (
-                    <>
-                      {" "}
-                      ·{" "}
-                      <a
-                        href={ingredientSourceUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        verify
-                      </a>
-                    </>
-                  )}
-                  {ingredientSource === "gemini" && (
-                    <>
-                      {" "}
-                      · verify against your product — web sources can be
-                      outdated
-                    </>
-                  )}
-                </small>
+              <p className="mt-3 font-mono text-[10px] leading-relaxed text-ink-faint">
+                source:{" "}
+                {ingredientSource === "openbeautyfacts"
+                  ? "openbeautyfacts.org"
+                  : "web search"}
+                {ingredientSourceUrl && (
+                  <>
+                    {" · "}
+                    <a
+                      href={ingredientSourceUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline decoration-ink-faint underline-offset-2"
+                    >
+                      verify
+                    </a>
+                  </>
+                )}
+                {ingredientSource === "gemini" && (
+                  <> · verify against your product — web sources can be outdated</>
+                )}
               </p>
             )}
           </>
         )}
-        <p>
-          <button
-            type="button"
-            onClick={() => setStep("back")}
-            disabled={createProduct.isPending}
-          >
-            back
-          </button>{" "}
-          <button
-            type="submit"
-            disabled={createProduct.isPending || !name || stillProcessing}
-          >
-            {createProduct.isPending
-              ? "saving..."
-              : stillProcessing
-                ? "still processing..."
-                : "save"}
-          </button>
-        </p>
-        {createProduct.error && (
-          <p role="alert">error: {createProduct.error.message}</p>
-        )}
-      </form>
-    </section>
+      </div>
+
+      {/* Error */}
+      {createProduct.error && (
+        <div
+          role="alert"
+          className="rounded-xl border border-rose bg-rose-pale px-4 py-3"
+        >
+          <p className="font-sans text-xs text-rose-deep">
+            {createProduct.error.message}
+          </p>
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => setStep("back")}
+          disabled={createProduct.isPending}
+          className="flex-1 rounded-full border border-black/25 bg-transparent py-3 font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink disabled:opacity-40"
+        >
+          ← back
+        </button>
+        <button
+          type="submit"
+          disabled={saveDisabled}
+          className="flex-[2] rounded-full bg-terracotta-deep py-3 font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-white shadow-[0_4px_14px_rgba(227,123,140,0.4)] disabled:opacity-40"
+        >
+          {createProduct.isPending
+            ? "saving…"
+            : stillProcessing
+              ? "still processing…"
+              : "save to shelf ✓"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+interface FieldProps {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  pending?: boolean;
+  required?: boolean;
+  last?: boolean;
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  placeholder,
+  disabled,
+  pending,
+  required,
+  last,
+}: FieldProps) {
+  return (
+    <label
+      className={`flex items-baseline gap-3 py-2.5 ${last ? "" : "border-b border-black/[0.07]"}`}
+    >
+      <span className="w-[88px] shrink-0 font-mono text-[10px] uppercase tracking-[0.08em] text-ink-soft">
+        {label}
+        {required && <span className="text-terracotta-deep"> *</span>}
+      </span>
+      <input
+        type="text"
+        value={value}
+        required={required}
+        disabled={disabled}
+        placeholder={placeholder}
+        onChange={(event) => onChange(event.target.value)}
+        className="min-w-0 flex-1 bg-transparent font-hand text-lg font-semibold text-ink outline-none placeholder:font-sans placeholder:text-sm placeholder:font-normal placeholder:text-ink-faint disabled:opacity-50"
+      />
+      {pending && (
+        <span
+          className="font-mono text-[9px] uppercase tracking-[0.06em] text-ink-faint"
+          aria-busy="true"
+        >
+          reading…
+        </span>
+      )}
+    </label>
+  );
+}
+
+interface SelectFieldProps {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: readonly string[];
+  disabled?: boolean;
+  pending?: boolean;
+}
+
+function SelectField({
+  label,
+  value,
+  onChange,
+  options,
+  disabled,
+  pending,
+}: SelectFieldProps) {
+  return (
+    <label className="flex items-baseline gap-3 border-b border-black/[0.07] py-2.5">
+      <span className="w-[88px] shrink-0 font-mono text-[10px] uppercase tracking-[0.08em] text-ink-soft">
+        {label}
+      </span>
+      <select
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        className="min-w-0 flex-1 cursor-pointer appearance-none bg-transparent font-hand text-lg font-semibold text-ink outline-none disabled:opacity-50"
+      >
+        <option value="">— pick one —</option>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+      {pending && (
+        <span
+          className="font-mono text-[9px] uppercase tracking-[0.06em] text-ink-faint"
+          aria-busy="true"
+        >
+          reading…
+        </span>
+      )}
+    </label>
   );
 }

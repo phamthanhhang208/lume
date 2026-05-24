@@ -17,24 +17,41 @@ interface FileRequest {
   headers?: Record<string, string>;
 }
 
+interface RegisterPayload {
+  files: Array<{
+    file_id: string;
+    requests: FileRequest[];
+  }>;
+}
+
 interface RegisterResponse {
-  result?: {
-    files: Array<{
-      file_id: string;
-      requests: FileRequest[];
-    }>;
-  };
+  result?: RegisterPayload;
+  data?: RegisterPayload;
+}
+
+interface TaskCreatePayload {
+  task_id: string;
 }
 
 interface TaskCreateResponse {
-  result?: { task_id: string };
+  result?: TaskCreatePayload;
+  data?: TaskCreatePayload;
+}
+
+// PC v2.0 returns `results` as a single object; v1.0 (and some endpoints)
+// return an array. We accept both shapes.
+type PollResultEntry = { url?: string; data?: { url?: string } };
+
+interface PollPayload {
+  // v2.0 uses `task_status`; older docs and v1.0 use `status`. Accept either.
+  task_status?: string;
+  status?: string;
+  results?: PollResultEntry | PollResultEntry[];
 }
 
 interface PollResponse {
-  result?: {
-    status?: string;
-    results?: Array<{ url?: string; data?: { url?: string } }>;
-  };
+  result?: PollPayload;
+  data?: PollPayload;
   status?: string;
 }
 
@@ -69,7 +86,8 @@ export async function runPerfectCorpTask(opts: RunTaskOptions): Promise<string> 
   }
   const regJson = (await regRes.json()) as RegisterResponse;
   console.log("pc register:", JSON.stringify(regJson));
-  const fileEntry = regJson.result?.files?.[0];
+  const regPayload = regJson.data ?? regJson.result;
+  const fileEntry = regPayload?.files?.[0];
   const fileId = fileEntry?.file_id;
   const uploadReq = fileEntry?.requests?.[0];
   if (!fileId || !uploadReq?.url) {
@@ -97,7 +115,7 @@ export async function runPerfectCorpTask(opts: RunTaskOptions): Promise<string> 
   }
   const taskJson = (await taskRes.json()) as TaskCreateResponse;
   console.log("pc task create:", JSON.stringify(taskJson));
-  const taskId = taskJson.result?.task_id;
+  const taskId = (taskJson.data ?? taskJson.result)?.task_id;
   if (!taskId) throw new Error(`no task_id in response: ${JSON.stringify(taskJson)}`);
 
   // 4. Poll. Backoff per docs/api-integration.md: 1s, 2s, 3s, 5s, 5s... up to ~60s.
@@ -112,10 +130,13 @@ export async function runPerfectCorpTask(opts: RunTaskOptions): Promise<string> 
     const pJson = (await pRes.json()) as PollResponse;
     last = pJson;
     console.log(`pc poll ${i + 1}:`, JSON.stringify(pJson));
-    const status = pJson.result?.status ?? pJson.status;
+    const pollPayload = pJson.data ?? pJson.result;
+    const status =
+      pollPayload?.task_status ?? pollPayload?.status ?? pJson.status;
     if (status === "success") {
-      const url =
-        pJson.result?.results?.[0]?.url ?? pJson.result?.results?.[0]?.data?.url;
+      const results = pollPayload?.results;
+      const firstResult = Array.isArray(results) ? results[0] : results;
+      const url = firstResult?.url ?? firstResult?.data?.url;
       if (!url) throw new Error(`success but no result url: ${JSON.stringify(pJson)}`);
       return url;
     }
