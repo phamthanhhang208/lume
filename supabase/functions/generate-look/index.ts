@@ -88,9 +88,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     const ownedIds = new Set(products.map((product: { id: string }) => product.id));
 
+    const faceData = profile.face_data as { face_shape?: unknown } | null;
+    const faceShape =
+      faceData && typeof faceData.face_shape === "string"
+        ? faceData.face_shape
+        : null;
+
     const orchestration = await callGeminiJson({
-      prompt: lookPrompt(userPrompt, products, VALID_SLOTS),
-      retryPrompt: lookPromptStricter(userPrompt, products, VALID_SLOTS),
+      prompt: lookPrompt(userPrompt, products, VALID_SLOTS, faceShape),
+      retryPrompt: lookPromptStricter(userPrompt, products, VALID_SLOTS, faceShape),
       geminiSchema: {
         type: "OBJECT",
         properties: {

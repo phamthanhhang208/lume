@@ -18,6 +18,7 @@ export interface Product {
   brand: string | null;
   category: ProductCategory;
   subcategory: string | null;
+  shade: string | null;
   sticker_image_url: string;
   original_image_url: string;
   ingredients: string[];
@@ -49,6 +50,7 @@ export interface Scan {
   skin_age: number;
   overall_score: number;
   raw_response: unknown;
+  simulation_image_url: string | null;
   created_at: string;
 }
 

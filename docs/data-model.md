@@ -30,6 +30,7 @@ A user's logged makeup or skincare product.
 | brand              | text        | Nullable                                                           |
 | category           | text        | Enum-like: "makeup" or "skincare"                                  |
 | subcategory        | text        | Nullable. e.g. "lipstick", "moisturizer", "serum"                  |
+| shade              | text        | Nullable. Color or shade label (e.g. "Rose Petal"), mostly makeup  |
 | sticker_image_url  | text        | URL into Supabase Storage. Background-removed cutout               |
 | original_image_url | text        | URL into Supabase Storage. The raw photo before background removal |
 | ingredients        | text[]      | Array of ingredient strings, OCR'd from back of product            |
@@ -42,16 +43,17 @@ Indexes: `(user_id, created_at desc)` for the collection grid.
 
 A user's skin analysis result at a point in time.
 
-| Column        | Type        | Notes                                                 |
-| ------------- | ----------- | ----------------------------------------------------- |
-| id            | uuid (PK)   | default gen_random_uuid()                             |
-| user_id       | uuid (FK)   | References `auth.users.id`                            |
-| image_url     | text        | URL into Supabase Storage. The selfie analyzed        |
-| metrics       | jsonb       | Object with 14 skin metrics, each a numeric score     |
-| skin_age      | int         | Result of Perfect Corp Skin Analysis                  |
-| overall_score | int         | Aggregate score from API                              |
-| raw_response  | jsonb       | Full API response, kept for debugging and re-analysis |
-| created_at    | timestamptz | default now()                                         |
+| Column                | Type        | Notes                                                                                                                |
+| --------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------- |
+| id                    | uuid (PK)   | default gen_random_uuid()                                                                                            |
+| user_id               | uuid (FK)   | References `auth.users.id`                                                                                           |
+| image_url             | text        | Path under `selfies` bucket. The selfie analyzed                                                                     |
+| metrics               | jsonb       | Object with 14 skin metrics, each a numeric score                                                                    |
+| skin_age              | int         | Result of Perfect Corp Skin Analysis                                                                                 |
+| overall_score         | int         | Aggregate score from API                                                                                             |
+| raw_response          | jsonb       | Full API response, kept for debugging and re-analysis                                                                |
+| simulation_image_url  | text \| null | Path under `selfies` bucket to the Perfect Corp Skin Simulation result, if the user has tapped "preview my skin". Cached after first generation. |
+| created_at            | timestamptz | default now()                                                                                                        |
 
 The `metrics` JSON structure (locked in once we verify against Perfect Corp's response):
 
@@ -141,6 +143,7 @@ export interface Product {
   brand: string | null;
   category: ProductCategory;
   subcategory: string | null;
+  shade: string | null;
   sticker_image_url: string;
   original_image_url: string;
   ingredients: string[];

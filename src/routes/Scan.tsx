@@ -35,6 +35,7 @@ export default function Scan() {
         userId: user.id,
         storagePath: profile.data.saved_selfie_url,
         needsToneAnalysis: !profile.data.skin_tone_data,
+        needsFaceAnalysis: !profile.data.face_data,
       },
       { onSuccess: () => setMode("view") },
     );
@@ -47,6 +48,7 @@ export default function Scan() {
         userId: user.id,
         blob,
         needsToneAnalysis: !profile.data?.skin_tone_data,
+        needsFaceAnalysis: !profile.data?.face_data,
       },
       { onSuccess: () => setMode("view") },
     );

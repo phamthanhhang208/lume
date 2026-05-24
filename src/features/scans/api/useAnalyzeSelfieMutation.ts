@@ -7,8 +7,20 @@ import { scanKeys } from "@/features/scans/api/scanKeys";
 import type { Scan, SkinMetrics } from "@/types/database";
 
 export type AnalyzeSelfieInput =
-  | { source: "new"; userId: string; blob: Blob; needsToneAnalysis: boolean }
-  | { source: "saved"; userId: string; storagePath: string; needsToneAnalysis: boolean };
+  | {
+      source: "new";
+      userId: string;
+      blob: Blob;
+      needsToneAnalysis: boolean;
+      needsFaceAnalysis: boolean;
+    }
+  | {
+      source: "saved";
+      userId: string;
+      storagePath: string;
+      needsToneAnalysis: boolean;
+      needsFaceAnalysis: boolean;
+    };
 
 interface AnalyzeSkinResponse {
   data?: {
@@ -23,6 +35,14 @@ interface AnalyzeSkinResponse {
 interface AnalyzeSkinToneResponse {
   data?: {
     tone: unknown;
+    raw_response: unknown;
+  };
+  error?: { code: string; message: string };
+}
+
+interface AnalyzeFaceResponse {
+  data?: {
+    face: unknown;
     raw_response: unknown;
   };
   error?: { code: string; message: string };
@@ -89,6 +109,28 @@ export function useAnalyzeSelfieMutation() {
           }
         } catch (err) {
           console.warn("skin-tone analysis failed (non-blocking):", err);
+        }
+      }
+
+      if (input.needsFaceAnalysis) {
+        try {
+          const face = await supabase.functions.invoke<AnalyzeFaceResponse>(
+            "analyze-face",
+            { body: { storage_path: storagePath } },
+          );
+          if (face.error) throw face.error;
+          if (face.data?.error) {
+            throw new Error(`${face.data.error.code}: ${face.data.error.message}`);
+          }
+          if (face.data?.data) {
+            const { error: profileError } = await supabase
+              .from("profiles")
+              .update({ face_data: face.data.data.face })
+              .eq("id", input.userId);
+            if (profileError) throw profileError;
+          }
+        } catch (err) {
+          console.warn("face analysis failed (non-blocking):", err);
         }
       }
 
