@@ -1,3 +1,4 @@
+import { FunctionsHttpError } from "@supabase/supabase-js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { supabase } from "@/lib/supabase";
@@ -5,6 +6,24 @@ import { profileKeys } from "@/features/profile/api/profileKeys";
 import { uploadSelfie } from "@/features/scans/api/selfieStorage";
 import { scanKeys } from "@/features/scans/api/scanKeys";
 import type { Scan, SkinMetrics } from "@/types/database";
+
+async function unwrapFunctionError(err: unknown): Promise<Error> {
+  if (err instanceof FunctionsHttpError) {
+    try {
+      const body = (await err.context.json()) as
+        | { error?: { code?: string; message?: string } }
+        | undefined;
+      if (body?.error?.message) {
+        return new Error(
+          `${body.error.code ?? "edge_error"}: ${body.error.message}`,
+        );
+      }
+    } catch {
+      // fall through
+    }
+  }
+  return err instanceof Error ? err : new Error(String(err));
+}
 
 export type AnalyzeSelfieInput =
   | {
@@ -69,7 +88,7 @@ export function useAnalyzeSelfieMutation() {
       const skin = await supabase.functions.invoke<AnalyzeSkinResponse>("analyze-skin", {
         body: { storage_path: storagePath },
       });
-      if (skin.error) throw skin.error;
+      if (skin.error) throw await unwrapFunctionError(skin.error);
       if (skin.data?.error) {
         throw new Error(`${skin.data.error.code}: ${skin.data.error.message}`);
       }
@@ -96,7 +115,7 @@ export function useAnalyzeSelfieMutation() {
             "analyze-skin-tone",
             { body: { storage_path: storagePath } },
           );
-          if (tone.error) throw tone.error;
+          if (tone.error) throw await unwrapFunctionError(tone.error);
           if (tone.data?.error) {
             throw new Error(`${tone.data.error.code}: ${tone.data.error.message}`);
           }
@@ -118,7 +137,7 @@ export function useAnalyzeSelfieMutation() {
             "analyze-face",
             { body: { storage_path: storagePath } },
           );
-          if (face.error) throw face.error;
+          if (face.error) throw await unwrapFunctionError(face.error);
           if (face.data?.error) {
             throw new Error(`${face.data.error.code}: ${face.data.error.message}`);
           }

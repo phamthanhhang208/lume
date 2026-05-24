@@ -42,12 +42,25 @@ export function useSearchIngredientsMutation() {
         }
         const result = data?.data;
         if (!result) throw new Error("no result");
-        return {
+        const out = {
           ingredients: result.ingredients,
           source: result.source,
           sourceUrl: result.source_url,
           matchName: result.match_name,
         };
+        console.log("[search-ingredients]", {
+          query: { name: input.name, brand: input.brand },
+          count: out.ingredients.length,
+          source: out.source,
+          sourceUrl: out.sourceUrl,
+          matchName: out.matchName,
+        });
+        if (out.ingredients.length === 0) {
+          console.warn(
+            `[search-ingredients] no match for "${input.brand ?? ""} ${input.name}".trim() — OBF + Gemini both came back empty`,
+          );
+        }
+        return out;
       } catch (err) {
         console.warn("ingredient search failed, user can hand-type:", err);
         return {
