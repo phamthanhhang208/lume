@@ -1,12 +1,16 @@
 import { useState, type FormEvent } from "react";
+import { useNavigate } from "react-router";
 
 import LumeMark from "@/components/ui/LumeMark";
+import { useDemoSignInMutation } from "@/features/auth/api/useDemoSignInMutation";
 import { useSignInMutation } from "@/features/auth/api/useSignInMutation";
 
 export default function SignIn() {
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const signIn = useSignInMutation();
+  const demoSignIn = useDemoSignInMutation();
+  const navigate = useNavigate();
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -14,6 +18,14 @@ export default function SignIn() {
       onSuccess: () => setSubmitted(true),
     });
   };
+
+  const onDemoLogin = () => {
+    demoSignIn.mutate(undefined, {
+      onSuccess: () => navigate("/dashboard", { replace: true }),
+    });
+  };
+
+  const busy = signIn.isPending || demoSignIn.isPending;
 
   if (submitted) {
     return (
@@ -57,23 +69,48 @@ export default function SignIn() {
               placeholder="you@example.com"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              disabled={signIn.isPending}
+              disabled={busy}
               className="w-full rounded-xl border border-black/[0.12] bg-cream-deep px-4 py-3 font-sans text-sm text-ink placeholder:text-ink-faint focus:border-terracotta-deep focus:outline-none disabled:opacity-50"
             />
           </div>
 
           <button
             type="submit"
-            disabled={signIn.isPending || !email}
+            disabled={busy || !email}
             className="w-full rounded-full bg-terracotta-deep py-3 font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-white shadow-[0_4px_14px_rgba(227,123,140,0.4)] transition-opacity disabled:opacity-40"
           >
             {signIn.isPending ? "sending…" : "send magic link"}
           </button>
         </form>
 
+        <div className="my-5 flex items-center gap-3">
+          <span className="h-px flex-1 bg-black/[0.10]" />
+          <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-ink-faint">
+            or
+          </span>
+          <span className="h-px flex-1 bg-black/[0.10]" />
+        </div>
+
+        <button
+          type="button"
+          onClick={onDemoLogin}
+          disabled={busy}
+          className="w-full rounded-full border border-black/25 bg-transparent py-3 font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink transition-opacity disabled:opacity-40"
+        >
+          {demoSignIn.isPending ? "signing in…" : "login as demo user"}
+        </button>
+        <p className="mt-2 text-center font-mono text-[9px] uppercase tracking-[0.08em] text-ink-faint">
+          for judges · pre-seeded account
+        </p>
+
         {signIn.error && (
           <p role="alert" className="mt-4 font-sans text-xs text-rose-deep">
             {signIn.error.message}
+          </p>
+        )}
+        {demoSignIn.error && (
+          <p role="alert" className="mt-4 font-sans text-xs text-rose-deep">
+            {demoSignIn.error.message}
           </p>
         )}
       </div>
