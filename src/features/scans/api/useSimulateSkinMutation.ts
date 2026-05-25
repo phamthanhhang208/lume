@@ -5,6 +5,7 @@ import { scanKeys } from "@/features/scans/api/scanKeys";
 
 export interface SimulateSkinInput {
   scanId: string;
+  productIds?: string[];
 }
 
 export interface SimulateSkinResult {
@@ -28,9 +29,15 @@ export function useSimulateSkinMutation() {
     mutationFn: async (
       input: SimulateSkinInput,
     ): Promise<SimulateSkinResult> => {
+      const body: { scan_id: string; product_ids?: string[] } = {
+        scan_id: input.scanId,
+      };
+      if (input.productIds && input.productIds.length > 0) {
+        body.product_ids = input.productIds;
+      }
       const { data, error } = await supabase.functions.invoke<SimulateSkinResponse>(
         "simulate-skin",
-        { body: { scan_id: input.scanId } },
+        { body },
       );
       if (error) throw error;
       if (data?.error) {

@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { Link } from "react-router";
 
 import VerdictTag from "@/components/ui/VerdictTag";
@@ -6,6 +7,7 @@ import { useLatestScan } from "@/features/scans/api/useLatestScan";
 import { useSelfieSignedUrls } from "@/features/scans/api/useSelfieSignedUrls";
 import { useSimulateSkinMutation } from "@/features/scans/api/useSimulateSkinMutation";
 import { useLatestVerdicts } from "@/features/verdicts/api/useLatestVerdicts";
+import type { Product } from "@/types/database";
 
 export default function Verdict() {
   const scan = useLatestScan();
@@ -146,13 +148,17 @@ export default function Verdict() {
       {/* Skin simulation preview */}
       {scan.data && (
         <SimulationSection
-          scanId={scan.data.id}
           selfiePath={scan.data.image_url}
           simulationPath={scan.data.simulation_image_url}
           urls={selfieUrls.data ?? {}}
           isPending={simulate.isPending}
           error={simulate.error?.message ?? null}
-          onSimulate={() => simulate.mutate({ scanId: scan.data!.id })}
+          skincare={(products.data ?? []).filter(
+            (p) => p.category === "skincare",
+          )}
+          onSimulate={(productIds) =>
+            simulate.mutate({ scanId: scan.data!.id, productIds })
+          }
         />
       )}
 
@@ -178,13 +184,13 @@ export default function Verdict() {
 }
 
 interface SimulationSectionProps {
-  scanId: string;
   selfiePath: string;
   simulationPath: string | null;
   urls: Record<string, string>;
   isPending: boolean;
   error: string | null;
-  onSimulate: () => void;
+  skincare: Product[];
+  onSimulate: (productIds: string[]) => void;
 }
 
 function SimulationSection({
@@ -193,11 +199,27 @@ function SimulationSection({
   urls,
   isPending,
   error,
+  skincare,
   onSimulate,
 }: SimulationSectionProps) {
   const beforeUrl = urls[selfiePath];
   const afterUrl = simulationPath ? urls[simulationPath] : null;
   const hasSimulation = !!simulationPath;
+
+  const allIds = useMemo(() => skincare.map((p) => p.id), [skincare]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(
+    () => new Set(allIds),
+  );
+  const toggle = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const selectedCount = [...selectedIds].filter((id) => allIds.includes(id))
+    .length;
 
   return (
     <div className="mx-4 mt-6 lg:mx-auto lg:max-w-3xl lg:px-4">
@@ -207,8 +229,8 @@ function SimulationSection({
         </h3>
         <p className="mt-1 font-sans text-xs text-ink-soft">
           {hasSimulation
-            ? "Perfect Corp simulation of your low-scoring concerns improving with consistent routine. estimates, not guarantees."
-            : "we'll simulate how your skin could look after sticking with the works pile."}
+            ? "Perfect Corp simulation based on the skincare products you committed to. estimates, not guarantees."
+            : "pick the skincare products you'll actually use — we'll simulate how your skin could look after 4 weeks."}
         </p>
 
         {hasSimulation && (
@@ -244,16 +266,61 @@ function SimulationSection({
           </div>
         )}
 
-        {!hasSimulation && (
-          <button
-            type="button"
-            onClick={onSimulate}
-            disabled={isPending}
-            className="mt-3 w-full rounded-full py-3 font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-white disabled:opacity-40"
-            style={{ background: "#7CB89C", boxShadow: "0 4px 14px rgba(124,184,156,.4)" }}
-          >
-            {isPending ? "simulating… (~20s)" : "preview your skin in 4 weeks"}
-          </button>
+        {skincare.length === 0 && (
+          <p className="mt-3 font-sans text-xs text-ink-soft">
+            add a skincare product first to run a simulation.
+          </p>
+        )}
+
+        {skincare.length > 0 && (
+          <>
+            <div className="mt-4 font-mono text-[9.5px] uppercase tracking-[0.08em] text-ink-soft">
+              {hasSimulation
+                ? "re-run with a different mix"
+                : "pick the products you'll use"}
+            </div>
+            <ul className="mt-2 flex flex-col gap-1.5">
+              {skincare.map((product) => {
+                const checked = selectedIds.has(product.id);
+                return (
+                  <li key={product.id}>
+                    <label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-black/[0.08] bg-cream/40 px-3 py-2">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggle(product.id)}
+                        className="h-4 w-4 cursor-pointer accent-sage-deep"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="font-mono text-[9px] uppercase tracking-[0.06em] text-ink-soft">
+                          {product.brand}
+                        </div>
+                        <div className="truncate font-sans text-[12.5px] font-semibold text-ink">
+                          {product.name}
+                        </div>
+                      </div>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+
+            <button
+              type="button"
+              onClick={() => onSimulate([...selectedIds])}
+              disabled={isPending || selectedCount === 0}
+              className="mt-3 w-full rounded-full py-3 font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-white disabled:opacity-40"
+              style={{ background: "#7CB89C", boxShadow: "0 4px 14px rgba(124,184,156,.4)" }}
+            >
+              {isPending
+                ? "simulating… (~25s)"
+                : selectedCount === 0
+                  ? "pick at least 1 product"
+                  : hasSimulation
+                    ? `re-simulate with ${selectedCount} product${selectedCount === 1 ? "" : "s"}`
+                    : `preview with ${selectedCount} product${selectedCount === 1 ? "" : "s"}`}
+            </button>
+          </>
         )}
 
         {error && (
