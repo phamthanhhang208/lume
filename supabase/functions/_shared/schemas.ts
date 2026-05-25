@@ -21,6 +21,7 @@ export type SearchIngredientsBody = z.infer<typeof searchIngredientsBody>;
 
 export const simulateSkinBody = z.object({
   scan_id: z.string().uuid(),
+  product_ids: z.array(z.string().uuid()).optional(),
 });
 export type SimulateSkinBody = z.infer<typeof simulateSkinBody>;
 
