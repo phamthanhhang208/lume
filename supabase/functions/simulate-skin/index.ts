@@ -17,6 +17,8 @@ import { runPerfectCorpTask } from "../_shared/perfectcorp.ts";
 import { simulateSkinBody } from "../_shared/schemas.ts";
 import { requireUser } from "../_shared/supabase.ts";
 
+// taskParams: { concerns }   ← flat, no `params` wrapper (PC API requires this)
+
 // Map our normalized metric keys (from analyze-skin/extractMetrics) to the
 // concern vocabulary that Perfect Corp Skin Simulation accepts. Keys we don't
 // have a clean mapping for (e.g. droopy_eyelid) are left out — those concerns
@@ -36,7 +38,7 @@ const METRIC_TO_CONCERN: Record<string, string> = {
   moisture: "moisture",
 };
 
-const LOW_SCORE_CUTOFF = 60;
+const LOW_SCORE_CUTOFF = 85;
 const MAX_CONCERNS = 5;
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -113,12 +115,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const contentType = selfie.type || "image/jpeg";
     const fileName = scan.image_url.split("/").pop() ?? "selfie.jpg";
 
+    console.log("simulate-skin: concerns selected:", JSON.stringify(concerns));
+
     const resultUrl = await runPerfectCorpTask({
       featureName: "skin-simulation",
       bytes,
       contentType,
       fileName,
-      taskParams: { params: { concerns } },
+      // No extra taskParams — skin-simulation auto-detects concerns from the image.
+      // Sending dst_actions or concerns both cause InvalidParameters (not violation).
     });
 
     const imgRes = await fetch(resultUrl);
