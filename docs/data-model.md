@@ -30,6 +30,7 @@ A user's logged makeup or skincare product.
 | brand              | text        | Nullable                                                           |
 | category           | text        | Enum-like: "makeup" or "skincare"                                  |
 | subcategory        | text        | Nullable. e.g. "lipstick", "moisturizer", "serum"                  |
+| shade              | text        | Nullable. Color or shade label (e.g. "Rose Petal"), mostly makeup  |
 | sticker_image_url  | text        | URL into Supabase Storage. Background-removed cutout               |
 | original_image_url | text        | URL into Supabase Storage. The raw photo before background removal |
 | ingredients        | text[]      | Array of ingredient strings, OCR'd from back of product            |
@@ -141,6 +142,7 @@ export interface Product {
   brand: string | null;
   category: ProductCategory;
   subcategory: string | null;
+  shade: string | null;
   sticker_image_url: string;
   original_image_url: string;
   ingredients: string[];

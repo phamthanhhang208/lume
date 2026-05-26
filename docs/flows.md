@@ -25,39 +25,63 @@ Each flow lists the trigger, the steps, the API calls, the data writes, and the 
 
 **Trigger:** User taps "Add product" on dashboard.
 
+The flow is a four-step wizard backed by a Zustand draft store that persists to
+localStorage so a refresh mid-flow doesn't lose work. Photo processing runs in
+the background after each confirm — the user moves on while Gemini extracts.
+The preview screen reads progressive status flags off the store and gates
+"save" until everything has settled.
+
 **Steps:**
 
 1. Pick category: "makeup" or "skincare"
 2. Camera opens. User captures photo of product front (or uploads from gallery)
-3. Show preview. User confirms or retakes
-4. Upload original photo to Storage at `products/{user_id}/products/{new_id}/original.jpg`
-5. Call Edge Function `remove-background` with the storage URL
-6. Receive background-removed PNG, upload to Storage at `.../sticker.png`
-7. Camera opens again (or gallery) for back-of-product photo
-8. Upload back photo to Storage at `.../back.jpg`
-9. Call Edge Function `extract-ingredients` with the back image URL
-10. Edge Function uses Gemini Vision to OCR the ingredients list
-11. Show user the extracted ingredients in an editable list. User confirms or edits
-12. User enters product name and brand (optional brand)
-13. Auto-suggest subcategory from name via Gemini (optional, can skip and let user pick from a dropdown)
-14. Save `products` row with sticker_image_url, original_image_url, ingredients, name, brand, subcategory
-15. Return to dashboard. New product appears in collection grid
+3. Show preview. User confirms ("use this") or retakes. Confirming kicks off
+   front processing in the background and advances to the back step immediately
+4. Background, on front confirm: upload original to
+   `products/{user_id}/products/{new_id}/original.jpg`, then run in parallel:
+   - Edge Function `remove-background` → upload result PNG to `.../sticker.png`
+   - Edge Function `extract-front-info` → returns `{name, brand, subcategory, shade}`,
+     each field nullable. Gemini gets a constrained subcategory list per category
+5. Camera opens for the back photo. User can also skip ("skip — no ingredient list")
+6. Show preview. User confirms or retakes. Confirming kicks off back processing
+   in the background and advances to the preview step immediately. Skipping
+   sets ingredients to `[]` and advances
+7. Background, on back confirm: upload back photo to `.../back.jpg`, call
+   Edge Function `extract-ingredients` (Gemini Vision OCR)
+8. Preview screen shows the extracted name, brand, subcategory (preselected),
+   shade, and ingredients, all editable. Fields still in flight show a "reading..."
+   indicator next to them and the save button is disabled until both processings
+   settle. The user types into anything that came back null and edits anything
+   that came back wrong
+9. Save `products` row with `name, brand, category, subcategory, shade,`
+   `original_image_url, sticker_image_url, ingredients`
+10. Reset the draft store and return to dashboard. New product appears in the
+    collection grid
 
 **APIs:**
 
-- Perfect Corp Background Removal (via Edge Function)
-- Gemini Vision for ingredient OCR (via Edge Function)
-- Gemini Flash for subcategory inference (via Edge Function, optional)
+- Perfect Corp Background Removal (via Edge Function `remove-background`)
+- Gemini Vision for front-info extraction (via Edge Function `extract-front-info`)
+- Gemini Vision for ingredient OCR (via Edge Function `extract-ingredients`)
 
-**Data writes:** `products` row, three Storage uploads.
+**Data writes:** `products` row, two or three Storage uploads (back.jpg only if
+not skipped).
 
 **Success:** New product visible in collection grid as a sticker.
 
 **Failure modes:**
 
-- Background removal fails → fall back to using the original image as the sticker, show a small warning
-- Ingredient OCR returns nothing or garbage → show empty editable list, let user type ingredients
-- User can cancel at any step; partial data is discarded (no half-saved products)
+- Background removal fails → fall back to using the original image as the sticker
+- Front-info extraction fails or returns garbage after the stricter retry → all
+  four fields come back null, the user fills in at preview
+- Ingredient OCR returns nothing or garbage → ingredients come back `[]`, the
+  user types at preview
+- Front and back processing race conditions (e.g. user retakes after a confirm)
+  are guarded by a per-task generation counter — stale mutation results are
+  discarded
+- User can cancel at any step; the draft is cleared, partial data is discarded
+- Page refresh mid-flow restores the draft from localStorage minus any
+  in-memory blobs (the user retakes the active photo if mid-step)
 
 ## Flow 2: Skin analysis
 
