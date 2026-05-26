@@ -6,6 +6,7 @@ import {
   useGenerateLookMutation,
   type GeneratedLook,
 } from "@/features/looks/api/useGenerateLookMutation";
+import { useDeleteLookMutation } from "@/features/looks/api/useDeleteLookMutation";
 import { useLooks } from "@/features/looks/api/useLooks";
 import { useLookSignedUrls } from "@/features/looks/api/useLookSignedUrls";
 import type { Look as LookRow, Product } from "@/types/database";
@@ -25,6 +26,8 @@ export default function Look() {
   const looks = useLooks();
   const products = useProducts();
   const lookUrls = useLookSignedUrls(looks.data);
+
+  const deleteLook = useDeleteLookMutation();
 
   const productsById: Record<string, Product> = {};
   for (const product of products.data ?? []) productsById[product.id] = product;
@@ -176,6 +179,8 @@ export default function Look() {
                       : undefined
                   }
                   productsById={productsById}
+                  onDelete={() => deleteLook.mutate(look)}
+                  deleting={deleteLook.isPending && deleteLook.variables?.id === look.id}
                 />
               ))}
             </div>
@@ -283,40 +288,127 @@ interface LookHistoryRowProps {
   look: LookRow;
   signedUrl: string | undefined;
   productsById: Record<string, Product>;
+  onDelete: () => void;
+  deleting: boolean;
 }
 
-function LookHistoryRow({ look, signedUrl, productsById }: LookHistoryRowProps) {
+function LookHistoryRow({ look, signedUrl, productsById, onDelete, deleting }: LookHistoryRowProps) {
+  const [expanded, setExpanded] = useState(false);
+
   return (
-    <div className="rounded-xl border border-black/[0.10] bg-white p-3.5" style={{ boxShadow: "0 1px 2px rgba(20,18,14,.05)" }}>
-      <div className="flex items-start gap-3">
-        {signedUrl && (
-          <img
-            src={signedUrl}
-            alt={`look: ${look.prompt}`}
-            className="h-16 w-12 rounded-md object-cover border border-black/[0.08]"
-          />
-        )}
-        <div className="flex-1 min-w-0">
-          <div className="font-hand text-lg font-semibold leading-tight text-ink">
-            "{look.prompt}"
+    <div
+      className="rounded-xl border border-black/[0.10] bg-white overflow-hidden"
+      style={{ boxShadow: "0 1px 2px rgba(20,18,14,.05)" }}
+    >
+      {/* Collapsed header — always visible, click to expand */}
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        disabled={deleting}
+        className="w-full text-left p-3.5 disabled:opacity-50"
+      >
+        <div className="flex items-start gap-3">
+          {signedUrl && (
+            <img
+              src={signedUrl}
+              alt={`look: ${look.prompt}`}
+              className="h-16 w-12 shrink-0 rounded-md object-cover border border-black/[0.08]"
+            />
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="font-hand text-lg font-semibold leading-tight text-ink">
+              "{look.prompt}"
+            </div>
+            <div className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.04em] text-ink-faint">
+              {new Date(look.created_at).toLocaleDateString()}
+            </div>
+            {look.products_used.length > 0 && (
+              <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5">
+                {look.products_used.map(({ product_id, slot }) => {
+                  const product = productsById[product_id];
+                  return (
+                    <span key={`${product_id}-${slot}`} className="font-mono text-[9px] text-ink-soft">
+                      {slot}: {product ? product.name : "?"}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
           </div>
-          <div className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.04em] text-ink-faint">
-            {new Date(look.created_at).toLocaleDateString()}
-          </div>
+          {/* Chevron */}
+          <svg
+            width="12" height="12" viewBox="0 0 12 12" fill="none"
+            stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+            className="shrink-0 mt-1.5 text-ink-faint transition-transform"
+            style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)" }}
+          >
+            <path d="M2 4l4 4 4-4" />
+          </svg>
+        </div>
+      </button>
+
+      {/* Expanded detail */}
+      {expanded && (
+        <div className="border-t border-black/[0.07] px-3.5 pb-3.5 pt-3">
+          {/* Result image */}
+          {signedUrl && (
+            <img
+              src={signedUrl}
+              alt={`look result: ${look.prompt}`}
+              className="mb-3 w-full rounded-lg object-cover border border-black/[0.08]"
+              style={{ maxHeight: 320 }}
+            />
+          )}
+          {!signedUrl && (
+            <p className="mb-3 font-mono text-[10px] text-ink-faint">(no preview image)</p>
+          )}
+
+          {/* Reasoning */}
+          {look.gemini_reasoning && (
+            <p className="mb-3 font-sans text-xs leading-relaxed text-ink-soft">
+              {look.gemini_reasoning}
+            </p>
+          )}
+
+          {/* Products cast */}
           {look.products_used.length > 0 && (
-            <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5">
-              {look.products_used.map(({ product_id, slot }) => {
-                const product = productsById[product_id];
-                return (
-                  <span key={`${product_id}-${slot}`} className="font-mono text-[9px] text-ink-soft">
-                    {slot}: {product ? product.name : "?"}
-                  </span>
-                );
-              })}
+            <div className="mb-3">
+              <div className="mb-1.5 font-mono text-[9px] uppercase tracking-[0.08em] text-ink-soft">
+                the cast · {look.products_used.length}
+              </div>
+              <div className="flex flex-col gap-1">
+                {look.products_used.map(({ product_id, slot }) => {
+                  const product = productsById[product_id];
+                  return (
+                    <div key={`${product_id}-${slot}`} className="flex items-center gap-2">
+                      <span className="font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-terracotta-deep w-[54px] shrink-0">
+                        {slot}
+                      </span>
+                      <span className="font-hand text-base font-semibold leading-none text-ink">
+                        {product ? product.name : "unknown product"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
+
+          {/* Delete */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (window.confirm(`delete "${look.prompt}"? this can't be undone.`)) onDelete();
+            }}
+            disabled={deleting}
+            className="mt-1 rounded-full border px-4 py-1.5 font-mono text-[10px] uppercase tracking-[0.08em] text-rose-deep disabled:opacity-40"
+            style={{ borderColor: "rgba(178,107,74,.4)" }}
+          >
+            {deleting ? "deleting…" : "delete look"}
+          </button>
         </div>
-      </div>
+      )}
     </div>
   );
 }
