@@ -3,6 +3,12 @@ import type { ChangeEvent } from "react";
 import BlobPreview from "@/features/products/components/BlobPreview";
 import { useDraftProductStore } from "@/stores/useDraftProductStore";
 
+// Only use `capture` on touch devices — on desktop it opens the webcam
+// instead of the file picker, which prevents selecting existing images.
+const isTouchDevice =
+  typeof window !== "undefined" &&
+  window.matchMedia("(pointer: coarse)").matches;
+
 interface FrontStepProps {
   onConfirm: (blob: Blob) => void;
 }
@@ -27,7 +33,7 @@ export default function FrontStep({ onConfirm }: FrontStepProps) {
           <input
             type="file"
             accept="image/*"
-            capture="environment"
+            {...(isTouchDevice ? { capture: "environment" } : {})}
             onChange={onChange}
             className="sr-only"
           />
