@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 
 import IngredientList from "@/features/products/components/IngredientList";
@@ -38,6 +38,9 @@ export default function PreviewStep({ userId, onSaved }: PreviewStepProps) {
   const createProduct = useCreateProductMutation();
   const searchIngredients = useSearchIngredientsMutation();
   const lastSearchedGenerationRef = useRef<number>(-1);
+  // Lets the user opt out of the in-flight ingredient search without cancelling
+  // the network request — they can save with empty ingredients if they prefer.
+  const [searchSkipped, setSearchSkipped] = useState(false);
 
   const trimmedName = name.trim();
   const trimmedBrand = brand.trim();
@@ -46,6 +49,7 @@ export default function PreviewStep({ userId, onSaved }: PreviewStepProps) {
   const runSearch = (force: boolean) => {
     if (!trimmedName) return;
     if (searchIngredients.isPending) return;
+    setSearchSkipped(false);
     searchIngredients.mutate(
       { name: trimmedName, brand: trimmedBrand || null },
       {
@@ -85,12 +89,54 @@ export default function PreviewStep({ userId, onSaved }: PreviewStepProps) {
     backProcessingGeneration,
   ]);
 
-  if (!category || !productId || !originalStoragePath || !stickerStoragePath) {
+  // ── Guard: category / productId are set at step 1 — if missing, something
+  //    is genuinely broken and the user needs to restart.
+  if (!category || !productId) {
     return (
       <section className="rounded-2xl border border-dashed border-rose bg-rose-pale/40 px-5 py-6 text-center">
-        <p className="font-hand text-xl font-semibold text-ink">
-          missing data
+        <p className="font-hand text-xl font-semibold text-ink">missing data</p>
+        <p className="mt-1 font-sans text-xs text-ink-soft">
+          something dropped along the way. start over from the top.
         </p>
+        <button
+          type="button"
+          onClick={() => setStep("category")}
+          className="mt-4 rounded-full border border-black/25 bg-transparent px-5 py-2.5 font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink"
+        >
+          back to start
+        </button>
+      </section>
+    );
+  }
+
+  // ── Front paths: null while processFront is still running. Show a spinner
+  //    instead of the "missing data" error so the user knows to wait.
+  if (!originalStoragePath || !stickerStoragePath) {
+    if (frontProcessingStatus === "pending") {
+      return (
+        <div
+          className="flex items-center gap-3 rounded-xl border border-black/[0.08] bg-white px-4 py-5"
+          style={{ boxShadow: "0 1px 3px rgba(20,18,14,.05)" }}
+        >
+          <span className="relative inline-flex h-2.5 w-2.5 shrink-0">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-terracotta-deep opacity-60" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-terracotta-deep" />
+          </span>
+          <div>
+            <div className="font-hand text-lg font-semibold leading-tight text-ink">
+              reading the front of the product…
+            </div>
+            <p className="font-sans text-[11px] text-ink-soft">
+              the form will appear as soon as we're done
+            </p>
+          </div>
+        </div>
+      );
+    }
+    // Front processing errored or never ran — genuine missing data.
+    return (
+      <section className="rounded-2xl border border-dashed border-rose bg-rose-pale/40 px-5 py-6 text-center">
+        <p className="font-hand text-xl font-semibold text-ink">missing data</p>
         <p className="mt-1 font-sans text-xs text-ink-soft">
           something dropped along the way. start over from the top.
         </p>
@@ -110,26 +156,26 @@ export default function PreviewStep({ userId, onSaved }: PreviewStepProps) {
   const backPending = backProcessingStatus === "pending";
   const frontError = frontProcessingStatus === "error";
   const backError = backProcessingStatus === "error";
-  const searching = searchIngredients.isPending;
-  const stillProcessing = frontPending || backPending || searching;
+  const searching = searchIngredients.isPending && !searchSkipped;
+  // Ingredient search is intentionally excluded from stillProcessing — the user
+  // can save with no ingredients if they want to skip.
+  const stillProcessing = frontPending || backPending;
   const saveDisabled = createProduct.isPending || !name || stillProcessing;
 
   const processingLabel = frontPending
     ? "reading the front of the product…"
     : backPending
       ? "reading the ingredients on the back…"
-      : searching
-        ? "looking up ingredients online…"
-        : null;
+      : null;
 
   const showSourceCaption =
     (ingredientSource === "openbeautyfacts" || ingredientSource === "gemini") &&
     ingredients.length > 0;
   const showSearchButton =
     backDone &&
+    !searchIngredients.isPending &&
     ingredients.length === 0 &&
-    trimmedName.length > 0 &&
-    !searching;
+    trimmedName.length > 0;
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -258,13 +304,19 @@ export default function PreviewStep({ userId, onSaved }: PreviewStepProps) {
               disabled={createProduct.isPending}
             />
             {searching && (
-              <p
-                className="mt-3 flex items-center gap-2 font-sans text-xs text-ink-soft"
-                aria-busy="true"
-              >
+              <div className="mt-3 flex items-center gap-2">
                 <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-terracotta-deep" />
-                searching online for ingredients…
-              </p>
+                <p className="font-sans text-xs text-ink-soft" aria-busy="true">
+                  searching online for ingredients…
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setSearchSkipped(true)}
+                  className="ml-auto font-mono text-[10px] uppercase tracking-[0.06em] text-ink-faint underline decoration-ink-faint underline-offset-2"
+                >
+                  skip
+                </button>
+              </div>
             )}
             {showSearchButton && (
               <button
