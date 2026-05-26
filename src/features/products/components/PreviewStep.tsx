@@ -1,7 +1,9 @@
+import { useEffect, useRef } from "react";
 import type { FormEvent } from "react";
 
 import IngredientList from "@/features/products/components/IngredientList";
 import { useCreateProductMutation } from "@/features/products/api/useCreateProductMutation";
+import { useSearchIngredientsMutation } from "@/features/products/api/useSearchIngredientsMutation";
 import { subcategoriesFor } from "@/features/products/utils/subcategories";
 import { useDraftProductStore } from "@/stores/useDraftProductStore";
 
@@ -17,12 +19,15 @@ export default function PreviewStep({ userId, onSaved }: PreviewStepProps) {
     originalStoragePath,
     stickerStoragePath,
     ingredients,
+    ingredientSource,
+    ingredientSourceUrl,
     name,
     brand,
     subcategory,
     shade,
     frontProcessingStatus,
     backProcessingStatus,
+    backProcessingGeneration,
     setName,
     setBrand,
     setSubcategory,
@@ -31,6 +36,54 @@ export default function PreviewStep({ userId, onSaved }: PreviewStepProps) {
     setStep,
   } = useDraftProductStore();
   const createProduct = useCreateProductMutation();
+  const searchIngredients = useSearchIngredientsMutation();
+  const lastSearchedGenerationRef = useRef<number>(-1);
+
+  const trimmedName = name.trim();
+  const trimmedBrand = brand.trim();
+  const backDone = backProcessingStatus === "done";
+
+  const runSearch = (force: boolean) => {
+    if (!trimmedName) return;
+    if (searchIngredients.isPending) return;
+    searchIngredients.mutate(
+      { name: trimmedName, brand: trimmedBrand || null },
+      {
+        onSuccess: (result) => {
+          if (result.ingredients.length === 0) return;
+          const current = useDraftProductStore.getState();
+          // Race-guard: don't overwrite ingredients the user typed while we
+          // were searching, unless this was an explicit manual re-search.
+          if (!force && current.ingredients.length > 0) return;
+          useDraftProductStore.setState({
+            ingredients: result.ingredients,
+            ingredientSource: result.source,
+            ingredientSourceUrl: result.sourceUrl,
+          });
+        },
+      },
+    );
+  };
+
+  // Auto-trigger search once per back attempt when OCR (or skip) leaves us
+  // with no ingredients but we do have a product name to query with.
+  useEffect(() => {
+    if (!backDone) return;
+    if (ingredients.length > 0) return;
+    if (!trimmedName) return;
+    if (ingredientSource !== "manual") return;
+    if (searchIngredients.isPending) return;
+    if (lastSearchedGenerationRef.current === backProcessingGeneration) return;
+    lastSearchedGenerationRef.current = backProcessingGeneration;
+    runSearch(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    backDone,
+    ingredients.length,
+    trimmedName,
+    ingredientSource,
+    backProcessingGeneration,
+  ]);
 
   if (!category || !productId || !originalStoragePath || !stickerStoragePath) {
     return (
@@ -46,7 +99,17 @@ export default function PreviewStep({ userId, onSaved }: PreviewStepProps) {
   const options = subcategoriesFor(category);
   const frontPending = frontProcessingStatus === "pending";
   const backPending = backProcessingStatus === "pending";
-  const stillProcessing = frontPending || backPending;
+  const searching = searchIngredients.isPending;
+  const stillProcessing = frontPending || backPending || searching;
+
+  const showSourceCaption =
+    (ingredientSource === "openbeautyfacts" || ingredientSource === "gemini") &&
+    ingredients.length > 0;
+  const showSearchButton =
+    backDone &&
+    ingredients.length === 0 &&
+    trimmedName.length > 0 &&
+    !searching;
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -133,11 +196,57 @@ export default function PreviewStep({ userId, onSaved }: PreviewStepProps) {
         {backPending ? (
           <p aria-busy="true">reading ingredients...</p>
         ) : (
-          <IngredientList
-            ingredients={ingredients}
-            onChange={setIngredients}
-            disabled={createProduct.isPending}
-          />
+          <>
+            <IngredientList
+              ingredients={ingredients}
+              onChange={setIngredients}
+              disabled={createProduct.isPending}
+            />
+            {searching && (
+              <p aria-busy="true">searching online for ingredients...</p>
+            )}
+            {showSearchButton && (
+              <p>
+                <button
+                  type="button"
+                  onClick={() => runSearch(true)}
+                  disabled={createProduct.isPending}
+                >
+                  search online
+                </button>
+              </p>
+            )}
+            {showSourceCaption && (
+              <p>
+                <small>
+                  source:{" "}
+                  {ingredientSource === "openbeautyfacts"
+                    ? "openbeautyfacts.org"
+                    : "web search"}
+                  {ingredientSourceUrl && (
+                    <>
+                      {" "}
+                      ·{" "}
+                      <a
+                        href={ingredientSourceUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        verify
+                      </a>
+                    </>
+                  )}
+                  {ingredientSource === "gemini" && (
+                    <>
+                      {" "}
+                      · verify against your product — web sources can be
+                      outdated
+                    </>
+                  )}
+                </small>
+              </p>
+            )}
+          </>
         )}
         <p>
           <button

@@ -13,6 +13,38 @@ export function ingredientOcrPromptStricter(): string {
 Photo: back of a beauty product. Return the printed ingredients list, in order, exactly as printed. Each ingredient is one string. Do not invent or normalize.`;
 }
 
+export function ingredientSearchPrompt(name: string, brand: string | null): string {
+  const fullName = brand ? `${brand} ${name}` : name;
+  return `Search the web for the published ingredients list of this beauty product:
+
+Product: ${fullName}
+
+Look at the manufacturer's website, official retailer pages (Sephora, Ulta, brand sites), or reputable beauty databases. Return ONLY a JSON object inside a \`\`\`json fenced code block, like this:
+
+\`\`\`json
+{
+  "ingredients": ["water", "glycerin", "niacinamide"],
+  "source_url": "https://www.example.com/product-page"
+}
+\`\`\`
+
+Rules:
+- ingredients: array of ingredient strings as printed on the source page, in order.
+- source_url: the URL you sourced the list from. Use null if you are not confident.
+- If you cannot find a credible ingredients list, return {"ingredients": [], "source_url": null}.
+- Do not invent ingredients. Do not include commentary outside the JSON block.`;
+}
+
+export function ingredientSearchPromptStricter(name: string, brand: string | null): string {
+  const fullName = brand ? `${brand} ${name}` : name;
+  return `Return exactly one JSON object and nothing else. No prose, no markdown fences, no commentary:
+{"ingredients": string[], "source_url": string | null}
+
+Find the published ingredients list for: ${fullName}
+
+If you are not confident, return {"ingredients": [], "source_url": null}.`;
+}
+
 // Kept in sync with src/features/products/utils/subcategories.ts.
 // Edge runtime can't import TS path aliases, so the lists are duplicated here.
 const MAKEUP_SUBCATEGORIES = [
@@ -161,12 +193,16 @@ export function lookPrompt(
   userPrompt: string,
   products: LookProductCtx[],
   validSlots: readonly string[],
+  faceShape: string | null,
 ): string {
+  const facePart = faceShape
+    ? `\nUSER FACE SHAPE: ${faceShape}\nWhen relevant, tailor contour, highlighter, and brow choices to this face shape.\n`
+    : "";
   return `You are a makeup artist. Pick a subset of the user's owned makeup products that
 fits the look they describe. Assign each picked product to a single slot.
 
 USER PROMPT: ${userPrompt}
-
+${facePart}
 OWNED MAKEUP PRODUCTS:
 ${formatLookProducts(products)}
 
@@ -174,7 +210,9 @@ VALID SLOTS: ${validSlots.join(", ")}
 
 Return a JSON object with:
 - products: array of {"product_id": <id>, "slot": <one of VALID SLOTS>}
-- reasoning: 1-3 sentences on why these picks fit the look
+- reasoning: 1-3 sentences on why these picks fit the look${
+    faceShape ? " (mention face shape if it influenced a pick)" : ""
+  }
 - gaps: array of slot names that the user doesn't own a good product for
 
 Rules:
@@ -188,12 +226,14 @@ export function lookPromptStricter(
   userPrompt: string,
   products: LookProductCtx[],
   validSlots: readonly string[],
+  faceShape: string | null,
 ): string {
+  const facePart = faceShape ? `\nFACE SHAPE: ${faceShape}\n` : "";
   return `Return ONLY a JSON object: {"products":[{"product_id":string,"slot":string}],"reasoning":string,"gaps":string[]}.
 slot MUST be one of: ${validSlots.join(", ")}. product_id MUST come from the list below.
 
 USER PROMPT: ${userPrompt}
-
+${facePart}
 PRODUCTS:
 ${formatLookProducts(products)}`;
 }

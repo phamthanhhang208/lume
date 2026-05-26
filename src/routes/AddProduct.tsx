@@ -95,14 +95,19 @@ export default function AddProduct() {
             ) {
               return;
             }
-            useDraftProductStore.setState((s) => ({
-              backStoragePath: result.backStoragePath,
-              // If user has already edited ingredients in preview while OCR ran,
-              // keep their list.
-              ingredients:
-                s.ingredients.length === 0 ? result.ingredients : s.ingredients,
-              backProcessingStatus: "done",
-            }));
+            useDraftProductStore.setState((s) => {
+              const wroteFromOcr =
+                s.ingredients.length === 0 && result.ingredients.length > 0;
+              return {
+                backStoragePath: result.backStoragePath,
+                // If user has already edited ingredients in preview while OCR ran,
+                // keep their list.
+                ingredients: wroteFromOcr ? result.ingredients : s.ingredients,
+                ingredientSource: wroteFromOcr ? "ocr" : s.ingredientSource,
+                ingredientSourceUrl: wroteFromOcr ? null : s.ingredientSourceUrl,
+                backProcessingStatus: "done",
+              };
+            });
           },
           onError: () => {
             if (

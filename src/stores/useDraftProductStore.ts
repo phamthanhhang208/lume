@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+import type { IngredientSource } from "@/features/products/api/useSearchIngredientsMutation";
 import type { ProductCategory } from "@/types/database";
 
 export type DraftStep = "category" | "front" | "back" | "preview";
@@ -16,6 +17,11 @@ interface DraftProductState {
   stickerStoragePath: string | null;
   backStoragePath: string | null;
   ingredients: string[];
+  // Tracks where the current ingredient list came from so the preview screen
+  // can show provenance and decide whether to trigger an online search.
+  // User edits via the IngredientList UI snap this back to "manual".
+  ingredientSource: IngredientSource;
+  ingredientSourceUrl: string | null;
   name: string;
   brand: string;
   subcategory: string;
@@ -53,6 +59,8 @@ const initialState = {
   stickerStoragePath: null,
   backStoragePath: null,
   ingredients: [],
+  ingredientSource: "manual" as IngredientSource,
+  ingredientSourceUrl: null,
   name: "",
   brand: "",
   subcategory: "",
@@ -71,7 +79,12 @@ export const useDraftProductStore = create<DraftProductState>()(
       setCategory: (category) => set({ category }),
       setOriginalBlob: (originalBlob) => set({ originalBlob }),
       setBackBlob: (backBlob) => set({ backBlob }),
-      setIngredients: (ingredients) => set({ ingredients }),
+      setIngredients: (ingredients) =>
+        set({
+          ingredients,
+          ingredientSource: "manual",
+          ingredientSourceUrl: null,
+        }),
       setName: (name) => set({ name }),
       setBrand: (brand) => set({ brand }),
       setSubcategory: (subcategory) => set({ subcategory }),
@@ -105,6 +118,8 @@ export const useDraftProductStore = create<DraftProductState>()(
         stickerStoragePath: state.stickerStoragePath,
         backStoragePath: state.backStoragePath,
         ingredients: state.ingredients,
+        ingredientSource: state.ingredientSource,
+        ingredientSourceUrl: state.ingredientSourceUrl,
         name: state.name,
         brand: state.brand,
         subcategory: state.subcategory,
