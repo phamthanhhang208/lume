@@ -3,6 +3,10 @@ import type { ChangeEvent } from "react";
 import BlobPreview from "@/features/products/components/BlobPreview";
 import { useDraftProductStore } from "@/stores/useDraftProductStore";
 
+const isTouchDevice =
+  typeof window !== "undefined" &&
+  window.matchMedia("(pointer: coarse)").matches;
+
 interface BackStepProps {
   onConfirm: (blob: Blob) => void;
   onSkip: () => void;
@@ -28,7 +32,7 @@ export default function BackStep({ onConfirm, onSkip }: BackStepProps) {
           <input
             type="file"
             accept="image/*"
-            capture="environment"
+            {...(isTouchDevice ? { capture: "environment" } : {})}
             onChange={onChange}
             className="sr-only"
           />
@@ -47,7 +51,7 @@ export default function BackStep({ onConfirm, onSkip }: BackStepProps) {
           </svg>
           <div>
             <div className="font-hand text-2xl font-semibold leading-tight text-ink">
-              tap to capture
+              {isTouchDevice ? "tap to capture" : "upload photo"}
             </div>
             <p className="mt-1 font-sans text-xs leading-relaxed text-ink-soft">
               point at the ingredient list on the back of the package
