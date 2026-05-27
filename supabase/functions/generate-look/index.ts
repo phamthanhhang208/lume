@@ -29,22 +29,85 @@ import { lookPrompt, lookPromptStricter } from "../_shared/prompts.ts";
 import { lookOrchestration } from "../_shared/schemas.ts";
 import { requireUser } from "../_shared/supabase.ts";
 
-const SLOT_TO_EFFECT: Record<string, string> = {
-  foundation: "FoundationEffect",
-  concealer: "ConcealerEffect",
-  blush: "BlushEffect",
-  bronzer: "BronzerEffect",
-  contour: "ContourEffect",
-  highlighter: "HighlighterEffect",
-  lipstick: "LipColorEffect",
-  "lip liner": "LipLinerEffect",
-  eyeshadow: "EyeshadowEffect",
-  eyeliner: "EyelinerEffect",
-  eyelash: "EyelashesEffect",
-  eyebrow: "EyebrowsEffect",
+// Slot names (Gemini output) → Perfect Corp category strings.
+const SLOT_TO_PC_CATEGORY: Record<string, string> = {
+  foundation: "foundation",
+  concealer: "concealer",
+  blush: "blush",
+  bronzer: "bronzer",
+  contour: "contour",
+  highlighter: "highlighter",
+  lipstick: "lip_color",
+  "lip liner": "lip_liner",
+  eyeshadow: "eye_shadow",
+  eyeliner: "eye_liner",
+  eyelash: "eyelashes",
+  eyebrow: "eyebrows",
 };
 
-const VALID_SLOTS = Object.keys(SLOT_TO_EFFECT);
+// Default color + intensity per PC category, plus any category-specific fields.
+interface CategoryDefaults {
+  color: string;
+  colorIntensity: number;
+  pattern?: string;
+  shape?: string;
+  style?: string;
+}
+const CATEGORY_DEFAULTS: Record<string, CategoryDefaults> = {
+  foundation:  { color: "#E8C5A0", colorIntensity: 0.45 },
+  concealer:   { color: "#EDD0B0", colorIntensity: 0.45 },
+  blush:       { color: "#E8919A", colorIntensity: 0.50, pattern: "natural" },
+  bronzer:     { color: "#C68642", colorIntensity: 0.40, pattern: "natural" },
+  contour:     { color: "#B07850", colorIntensity: 0.40, pattern: "natural" },
+  highlighter: { color: "#FFE5B4", colorIntensity: 0.50, pattern: "natural" },
+  lip_color:   { color: "#C44B4B", colorIntensity: 0.80, shape: "natural", style: "matte" },
+  lip_liner:   { color: "#A83030", colorIntensity: 0.70, pattern: "natural" },
+  eye_shadow:  { color: "#8B7355", colorIntensity: 0.60, pattern: "natural" },
+  eye_liner:   { color: "#2C2C2C", colorIntensity: 0.80, pattern: "natural" },
+  eyelashes:   { color: "#1A1A1A", colorIntensity: 0.90, pattern: "natural" },
+  eyebrows:    { color: "#5C4033", colorIntensity: 0.60, pattern: "natural" },
+};
+
+function buildEffects(
+  picks: Array<{ slot: string }>,
+  skinToneData: unknown,
+): Array<Record<string, unknown>> {
+  const effects: Array<Record<string, unknown>> = [];
+
+  for (const pick of picks) {
+    const category = SLOT_TO_PC_CATEGORY[pick.slot];
+    if (!category) continue;
+    const defs = CATEGORY_DEFAULTS[category];
+    if (!defs) continue;
+
+    // Foundation / concealer: use the user's actual skin tone hex if available.
+    let paletteColor = defs.color;
+    if (
+      (category === "foundation" || category === "concealer") &&
+      skinToneData !== null &&
+      typeof skinToneData === "object"
+    ) {
+      const st = skinToneData as Record<string, unknown>;
+      if (typeof st.hex_color === "string" && st.hex_color.startsWith("#")) {
+        paletteColor = st.hex_color;
+      }
+    }
+
+    const effect: Record<string, unknown> = {
+      category,
+      palettes: [{ color: paletteColor, colorIntensity: defs.colorIntensity }],
+    };
+    if (defs.pattern !== undefined) effect.pattern = defs.pattern;
+    if (defs.shape   !== undefined) effect.shape   = defs.shape;
+    if (defs.style   !== undefined) effect.style   = defs.style;
+
+    effects.push(effect);
+  }
+
+  return effects;
+}
+
+const VALID_SLOTS = Object.keys(SLOT_TO_PC_CATEGORY);
 
 const requestBody = z.object({ prompt: z.string().min(1).max(280) });
 
@@ -122,15 +185,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const usedSlots = new Set<string>();
     const picks = orchestration.products.filter((pick) => {
       if (!ownedIds.has(pick.product_id)) return false;
-      if (!SLOT_TO_EFFECT[pick.slot]) return false;
+      if (!SLOT_TO_PC_CATEGORY[pick.slot]) return false;
       if (usedSlots.has(pick.slot)) return false;
       usedSlots.add(pick.slot);
       return true;
     });
-
-    const effectList = picks.map((pick) => ({
-      feature_name: SLOT_TO_EFFECT[pick.slot],
-    }));
 
     const lookId = crypto.randomUUID();
     let resultStoragePath: string | null = null;
@@ -146,11 +205,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
         const fileName = profile.saved_selfie_url.split("/").pop() ?? "selfie.jpg";
 
         const resultUrl = await runPerfectCorpTask({
-          featureName: "ai-makeup",
+          featureName: "makeup-vto",
           bytes,
           contentType,
           fileName,
-          taskParams: { params: { effect_list: effectList } },
+          taskParams: {
+            effects: buildEffects(picks, profile.skin_tone_data),
+            version: "1.0",
+          },
         });
 
         const imgRes = await fetch(resultUrl);
