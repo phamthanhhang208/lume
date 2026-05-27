@@ -2,46 +2,40 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { supabase } from "@/lib/supabase";
 import { productKeys } from "@/features/products/api/productKeys";
-import type { Product, ProductCategory } from "@/types/database";
+import type { Product } from "@/types/database";
 
-export interface CreateProductInput {
+export interface UpdateProductInput {
   productId: string;
-  userId: string;
-  category: ProductCategory;
-  subcategory: string | null;
   name: string;
   brand: string | null;
+  subcategory: string | null;
   shade: string | null;
-  originalStoragePath: string;
-  stickerStoragePath: string;
   ingredients: string[];
 }
 
-export function useCreateProductMutation() {
+export function useUpdateProductMutation() {
   const queryClient = useQueryClient();
-
   return useMutation({
-    mutationFn: async (input: CreateProductInput): Promise<Product> => {
+    mutationFn: async (input: UpdateProductInput): Promise<Product> => {
       const { data, error } = await supabase
         .from("products")
-        .insert({
-          id: input.productId,
-          user_id: input.userId,
+        .update({
           name: input.name,
           brand: input.brand,
-          category: input.category,
           subcategory: input.subcategory,
           shade: input.shade,
-          original_image_url: input.originalStoragePath,
-          sticker_image_url: input.stickerStoragePath,
           ingredients: input.ingredients,
         })
+        .eq("id", input.productId)
         .select("*")
         .single();
       if (error) throw error;
       return data as Product;
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: productKeys.detail(variables.productId),
+      });
       queryClient.invalidateQueries({ queryKey: productKeys.list() });
     },
   });
