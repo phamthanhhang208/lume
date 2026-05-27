@@ -45,63 +45,162 @@ const SLOT_TO_PC_CATEGORY: Record<string, string> = {
   eyebrow: "eyebrows",
 };
 
-// Default color + intensity per PC category, plus any category-specific fields.
-interface CategoryDefaults {
-  color: string;
-  colorIntensity: number;
-  pattern?: string;
-  shape?: string;
-  style?: string;
-}
-const CATEGORY_DEFAULTS: Record<string, CategoryDefaults> = {
-  foundation:  { color: "#E8C5A0", colorIntensity: 0.45 },
-  concealer:   { color: "#EDD0B0", colorIntensity: 0.45 },
-  blush:       { color: "#E8919A", colorIntensity: 0.50, pattern: "natural" },
-  bronzer:     { color: "#C68642", colorIntensity: 0.40, pattern: "natural" },
-  contour:     { color: "#B07850", colorIntensity: 0.40, pattern: "natural" },
-  highlighter: { color: "#FFE5B4", colorIntensity: 0.50, pattern: "natural" },
-  lip_color:   { color: "#C44B4B", colorIntensity: 0.80, shape: "natural", style: "matte" },
-  lip_liner:   { color: "#A83030", colorIntensity: 0.70, pattern: "natural" },
-  eye_shadow:  { color: "#8B7355", colorIntensity: 0.60, pattern: "natural" },
-  eye_liner:   { color: "#2C2C2C", colorIntensity: 0.80, pattern: "natural" },
-  eyelashes:   { color: "#1A1A1A", colorIntensity: 0.90, pattern: "natural" },
-  eyebrows:    { color: "#5C4033", colorIntensity: 0.60, pattern: "natural" },
-};
-
+/**
+ * Builds the `effects` array for the PC makeup-vto task body.
+ *
+ * Palette rules (from the MCP schema):
+ *  - colorIntensity is always integer 0-100
+ *  - pattern / shape / style are OBJECTS { name } / { type }, not strings
+ *  - each category has unique required palette fields
+ */
 function buildEffects(
   picks: Array<{ slot: string }>,
   skinToneData: unknown,
 ): Array<Record<string, unknown>> {
-  const effects: Array<Record<string, unknown>> = [];
+  // Pull the user's measured skin-tone hex (for foundation/concealer).
+  let skinHex = "#E8C5A0"; // medium-beige fallback
+  if (skinToneData !== null && typeof skinToneData === "object") {
+    const st = skinToneData as Record<string, unknown>;
+    if (typeof st.hex_color === "string" && st.hex_color.startsWith("#")) {
+      skinHex = st.hex_color;
+    }
+  }
+
+  // Always start with a light skin-smooth base.
+  const effects: Array<Record<string, unknown>> = [
+    { category: "skin_smooth", skinSmoothStrength: 40, skinSmoothColorIntensity: 30 },
+  ];
 
   for (const pick of picks) {
     const category = SLOT_TO_PC_CATEGORY[pick.slot];
     if (!category) continue;
-    const defs = CATEGORY_DEFAULTS[category];
-    if (!defs) continue;
 
-    // Foundation / concealer: use the user's actual skin tone hex if available.
-    let paletteColor = defs.color;
-    if (
-      (category === "foundation" || category === "concealer") &&
-      skinToneData !== null &&
-      typeof skinToneData === "object"
-    ) {
-      const st = skinToneData as Record<string, unknown>;
-      if (typeof st.hex_color === "string" && st.hex_color.startsWith("#")) {
-        paletteColor = st.hex_color;
-      }
+    switch (category) {
+      // ── Face base ─────────────────────────────────────────────────────────
+      case "foundation":
+        effects.push({
+          category: "foundation",
+          palettes: [{
+            color: skinHex,
+            colorIntensity: 45,
+            coverageIntensity: 50,
+            glowIntensity: 20,
+          }],
+        });
+        break;
+
+      case "concealer":
+        // No pattern for concealer.
+        effects.push({
+          category: "concealer",
+          palettes: [{
+            color: skinHex,
+            colorIntensity: 45,
+            colorUnderEyeIntensity: 40,
+            coverageLevel: 50,
+          }],
+        });
+        break;
+
+      // ── Colour / sculpt ───────────────────────────────────────────────────
+      case "blush":
+        effects.push({
+          category: "blush",
+          pattern: { name: "1color1" },
+          palettes: [{ color: "#E8919A", colorIntensity: 50, texture: "matte" }],
+        });
+        break;
+
+      case "bronzer":
+        effects.push({
+          category: "bronzer",
+          pattern: { name: "Bronzer1" },
+          palettes: [{ color: "#C68642", colorIntensity: 40 }],
+        });
+        break;
+
+      case "contour":
+        effects.push({
+          category: "contour",
+          pattern: { name: "OvalFace6" },
+          palettes: [{ color: "#B07850", colorIntensity: 40 }],
+        });
+        break;
+
+      case "highlighter":
+        effects.push({
+          category: "highlighter",
+          pattern: { name: "OvalFace2" },
+          palettes: [{
+            color: "#FFE5B4",
+            colorIntensity: 50,
+            glowIntensity: 40,
+            shimmerIntensity: 50,
+            shimmerDensity: 40,
+            shimmerSize: 30,
+          }],
+        });
+        break;
+
+      // ── Lips ──────────────────────────────────────────────────────────────
+      case "lip_color":
+        effects.push({
+          category: "lip_color",
+          shape: { name: "original" },  // keep natural lip silhouette
+          style: { type: "full" },
+          palettes: [{ color: "#C44B4B", colorIntensity: 80, texture: "matte" }],
+        });
+        break;
+
+      case "lip_liner":
+        effects.push({
+          category: "lip_liner",
+          pattern: { name: "Natural1" },
+          palettes: [{
+            color: "#A83030",
+            colorIntensity: 70,
+            texture: "matte",
+            thickness: 30,
+            smoothness: 60,
+          }],
+        });
+        break;
+
+      // ── Eyes ──────────────────────────────────────────────────────────────
+      case "eye_shadow":
+        effects.push({
+          category: "eye_shadow",
+          pattern: { name: "1color1" },
+          palettes: [{ color: "#8B7355", colorIntensity: 60, texture: "matte" }],
+        });
+        break;
+
+      case "eye_liner":
+        effects.push({
+          category: "eye_liner",
+          pattern: { name: "Arabic3" },
+          palettes: [{ color: "#2C2C2C", colorIntensity: 80, texture: "matte" }],
+        });
+        break;
+
+      case "eyelashes":
+        // Eyelashes: no texture field.
+        effects.push({
+          category: "eyelashes",
+          pattern: { name: "Upper1" },
+          palettes: [{ color: "#1A1A1A", colorIntensity: 90 }],
+        });
+        break;
+
+      case "eyebrows":
+        // type:"color" = keep user's own brow shape, just tint it.
+        effects.push({
+          category: "eyebrows",
+          pattern: { type: "color" },
+          palettes: [{ color: "#5C4033", colorIntensity: 60, texture: "matte" }],
+        });
+        break;
     }
-
-    const effect: Record<string, unknown> = {
-      category,
-      palettes: [{ color: paletteColor, colorIntensity: defs.colorIntensity }],
-    };
-    if (defs.pattern !== undefined) effect.pattern = defs.pattern;
-    if (defs.shape   !== undefined) effect.shape   = defs.shape;
-    if (defs.style   !== undefined) effect.style   = defs.style;
-
-    effects.push(effect);
   }
 
   return effects;
