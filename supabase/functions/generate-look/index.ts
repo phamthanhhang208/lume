@@ -21,6 +21,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 import { z } from "npm:zod@4";
+import { Image } from "npm:imagescript@1";
 
 import { errorResponse, jsonResponse, preflight } from "../_shared/cors.ts";
 import { callGeminiJson } from "../_shared/gemini.ts";
@@ -44,6 +45,21 @@ const SLOT_TO_PC_CATEGORY: Record<string, string> = {
   eyelash: "eyelashes",
   eyebrow: "eyebrows",
 };
+
+/** Resize to ≤ 1920×1920 (PC hard limit). Returns JPEG bytes. */
+async function resizeForPC(
+  bytes: Uint8Array,
+): Promise<{ bytes: Uint8Array; contentType: string }> {
+  const MAX = 1920;
+  const img = await Image.decode(bytes);
+  if (img.width <= MAX && img.height <= MAX) {
+    // Still re-encode as JPEG so content-type is always consistent.
+    return { bytes: await img.encodeJPEG(90), contentType: "image/jpeg" };
+  }
+  const scale = Math.min(MAX / img.width, MAX / img.height);
+  img.resize(Math.floor(img.width * scale), Math.floor(img.height * scale));
+  return { bytes: await img.encodeJPEG(90), contentType: "image/jpeg" };
+}
 
 /**
  * Builds the `effects` array for the PC makeup-vto task body.
@@ -299,9 +315,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
           .from("selfies")
           .download(profile.saved_selfie_url);
         if (dlErr || !selfie) throw dlErr ?? new Error("no selfie blob");
-        const bytes = new Uint8Array(await selfie.arrayBuffer());
-        const contentType = selfie.type || "image/jpeg";
-        const fileName = profile.saved_selfie_url.split("/").pop() ?? "selfie.jpg";
+        const rawBytes = new Uint8Array(await selfie.arrayBuffer());
+        const { bytes, contentType } = await resizeForPC(rawBytes);
+        const fileName = "selfie.jpg";
 
         const resultUrl = await runPerfectCorpTask({
           featureName: "makeup-vto",
