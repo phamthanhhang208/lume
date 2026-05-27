@@ -311,6 +311,35 @@ function SentBubble({ children }: { children: React.ReactNode }) {
   );
 }
 
+// Fullscreen image lightbox — rendered at the root so it escapes any overflow:hidden
+function ImageLightbox({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: "rgba(0,0,0,0.92)" }}
+      onClick={onClose}
+    >
+      <img
+        src={src}
+        alt={alt}
+        className="max-h-svh max-w-full object-contain"
+        onClick={(e) => e.stopPropagation()}
+      />
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full"
+        style={{ background: "rgba(255,255,255,0.15)" }}
+        aria-label="Close fullscreen"
+      >
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round">
+          <path d="M2 2l10 10M12 2L2 12" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
 interface LookResultProps {
   look: GeneratedLook;
   productsById: Record<string, Product>;
@@ -319,17 +348,39 @@ interface LookResultProps {
 
 function LookResult({ look, productsById, lookUrls }: LookResultProps) {
   const signedUrl = look.result_image_url ? lookUrls?.[look.result_image_url] : undefined;
+  const [lightbox, setLightbox] = useState(false);
 
   return (
+    <>
+      {lightbox && signedUrl && (
+        <ImageLightbox src={signedUrl} alt={`look: ${look.prompt}`} onClose={() => setLightbox(false)} />
+      )}
     <div className="mt-4 rounded-2xl border border-black/[0.10] bg-white overflow-hidden" style={{ boxShadow: "0 2px 6px rgba(20,18,14,.08), 0 12px 28px rgba(60,40,20,.14)" }}>
       {/* VTO image */}
       {signedUrl ? (
-        <img
-          src={signedUrl}
-          alt={`look: ${look.prompt}`}
-          className="w-full object-cover"
-          style={{ maxHeight: 420 }}
-        />
+        <button
+          type="button"
+          className="relative w-full block group"
+          onClick={() => setLightbox(true)}
+          aria-label="View full image"
+        >
+          <img
+            src={signedUrl}
+            alt={`look: ${look.prompt}`}
+            className="w-full object-cover"
+            style={{ maxHeight: 420 }}
+          />
+          {/* Expand hint overlay */}
+          <span
+            className="absolute bottom-3 right-3 flex items-center gap-1.5 rounded-full px-2.5 py-1 opacity-0 group-hover:opacity-100 transition-opacity"
+            style={{ background: "rgba(0,0,0,0.55)" }}
+          >
+            <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round">
+              <path d="M1 5V1h4M10 6v4H6M6.5 4.5l4-4M.5 10.5l4-4" />
+            </svg>
+            <span className="font-mono text-[9px] uppercase tracking-[0.06em] text-white">expand</span>
+          </span>
+        </button>
       ) : (
         <div className="flex items-center justify-center bg-cream-deep py-10">
           <p className="font-mono text-[10px] text-ink-faint">(VTO render unavailable)</p>
@@ -390,6 +441,7 @@ function LookResult({ look, productsById, lookUrls }: LookResultProps) {
         )}
       </div>
     </div>
+    </>
   );
 }
 
@@ -403,6 +455,7 @@ interface LookHistoryRowProps {
 
 function LookHistoryRow({ look, signedUrl, productsById, onDelete, deleting }: LookHistoryRowProps) {
   const [expanded, setExpanded] = useState(false);
+  const [lightbox, setLightbox] = useState(false);
 
   return (
     <div
@@ -457,15 +510,34 @@ function LookHistoryRow({ look, signedUrl, productsById, onDelete, deleting }: L
       </button>
 
       {/* Expanded detail */}
+      {lightbox && signedUrl && (
+        <ImageLightbox src={signedUrl} alt={`look: ${look.prompt}`} onClose={() => setLightbox(false)} />
+      )}
       {expanded && (
         <div className="border-t border-black/[0.07] px-3.5 pb-3.5 pt-3">
           {signedUrl && (
-            <img
-              src={signedUrl}
-              alt={`look result: ${look.prompt}`}
-              className="mb-3 w-full rounded-lg object-cover border border-black/[0.08]"
-              style={{ maxHeight: 320 }}
-            />
+            <button
+              type="button"
+              className="relative mb-3 w-full block group"
+              onClick={() => setLightbox(true)}
+              aria-label="View full image"
+            >
+              <img
+                src={signedUrl}
+                alt={`look result: ${look.prompt}`}
+                className="w-full rounded-lg object-cover border border-black/[0.08]"
+                style={{ maxHeight: 320 }}
+              />
+              <span
+                className="absolute bottom-2.5 right-2.5 flex items-center gap-1.5 rounded-full px-2.5 py-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                style={{ background: "rgba(0,0,0,0.55)" }}
+              >
+                <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round">
+                  <path d="M1 5V1h4M10 6v4H6M6.5 4.5l4-4M.5 10.5l4-4" />
+                </svg>
+                <span className="font-mono text-[9px] uppercase tracking-[0.06em] text-white">expand</span>
+              </span>
+            </button>
           )}
           {!signedUrl && (
             <p className="mb-3 font-mono text-[10px] text-ink-faint">(no preview image)</p>
