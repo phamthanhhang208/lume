@@ -29,22 +29,184 @@ import { lookPrompt, lookPromptStricter } from "../_shared/prompts.ts";
 import { lookOrchestration } from "../_shared/schemas.ts";
 import { requireUser } from "../_shared/supabase.ts";
 
-const SLOT_TO_EFFECT: Record<string, string> = {
-  foundation: "FoundationEffect",
-  concealer: "ConcealerEffect",
-  blush: "BlushEffect",
-  bronzer: "BronzerEffect",
-  contour: "ContourEffect",
-  highlighter: "HighlighterEffect",
-  lipstick: "LipColorEffect",
-  "lip liner": "LipLinerEffect",
-  eyeshadow: "EyeshadowEffect",
-  eyeliner: "EyelinerEffect",
-  eyelash: "EyelashesEffect",
-  eyebrow: "EyebrowsEffect",
+// Slot names (Gemini output) → Perfect Corp category strings.
+const SLOT_TO_PC_CATEGORY: Record<string, string> = {
+  foundation: "foundation",
+  concealer: "concealer",
+  blush: "blush",
+  bronzer: "bronzer",
+  contour: "contour",
+  highlighter: "highlighter",
+  lipstick: "lip_color",
+  "lip liner": "lip_liner",
+  eyeshadow: "eye_shadow",
+  eyeliner: "eye_liner",
+  eyelash: "eyelashes",
+  eyebrow: "eyebrows",
 };
 
-const VALID_SLOTS = Object.keys(SLOT_TO_EFFECT);
+/**
+ * Builds the `effects` array for the PC makeup-vto task body.
+ *
+ * Palette rules (from the MCP schema):
+ *  - colorIntensity is always integer 0-100
+ *  - pattern / shape / style are OBJECTS { name } / { type }, not strings
+ *  - each category has unique required palette fields
+ */
+function buildEffects(
+  picks: Array<{ slot: string }>,
+  skinToneData: unknown,
+): Array<Record<string, unknown>> {
+  // Pull the user's measured skin-tone hex (for foundation/concealer).
+  let skinHex = "#E8C5A0"; // medium-beige fallback
+  if (skinToneData !== null && typeof skinToneData === "object") {
+    const st = skinToneData as Record<string, unknown>;
+    if (typeof st.hex_color === "string" && st.hex_color.startsWith("#")) {
+      skinHex = st.hex_color;
+    }
+  }
+
+  // Always start with a light skin-smooth base.
+  const effects: Array<Record<string, unknown>> = [
+    { category: "skin_smooth", skinSmoothStrength: 40, skinSmoothColorIntensity: 30 },
+  ];
+
+  for (const pick of picks) {
+    const category = SLOT_TO_PC_CATEGORY[pick.slot];
+    if (!category) continue;
+
+    switch (category) {
+      // ── Face base ─────────────────────────────────────────────────────────
+      case "foundation":
+        effects.push({
+          category: "foundation",
+          palettes: [{
+            color: skinHex,
+            colorIntensity: 45,
+            coverageIntensity: 50,
+            glowIntensity: 20,
+          }],
+        });
+        break;
+
+      case "concealer":
+        // No pattern for concealer.
+        effects.push({
+          category: "concealer",
+          palettes: [{
+            color: skinHex,
+            colorIntensity: 45,
+            colorUnderEyeIntensity: 40,
+            coverageLevel: 50,
+          }],
+        });
+        break;
+
+      // ── Colour / sculpt ───────────────────────────────────────────────────
+      case "blush":
+        effects.push({
+          category: "blush",
+          pattern: { name: "1color1" },
+          palettes: [{ color: "#E8919A", colorIntensity: 50, texture: "matte" }],
+        });
+        break;
+
+      case "bronzer":
+        effects.push({
+          category: "bronzer",
+          pattern: { name: "Bronzer1" },
+          palettes: [{ color: "#C68642", colorIntensity: 40 }],
+        });
+        break;
+
+      case "contour":
+        effects.push({
+          category: "contour",
+          pattern: { name: "OvalFace6" },
+          palettes: [{ color: "#B07850", colorIntensity: 40 }],
+        });
+        break;
+
+      case "highlighter":
+        effects.push({
+          category: "highlighter",
+          pattern: { name: "OvalFace2" },
+          palettes: [{
+            color: "#FFE5B4",
+            colorIntensity: 50,
+            glowIntensity: 40,
+            shimmerIntensity: 50,
+            shimmerDensity: 40,
+            shimmerSize: 30,
+          }],
+        });
+        break;
+
+      // ── Lips ──────────────────────────────────────────────────────────────
+      case "lip_color":
+        effects.push({
+          category: "lip_color",
+          shape: { name: "original" },  // keep natural lip silhouette
+          style: { type: "full" },
+          palettes: [{ color: "#C44B4B", colorIntensity: 80, texture: "matte" }],
+        });
+        break;
+
+      case "lip_liner":
+        effects.push({
+          category: "lip_liner",
+          pattern: { name: "Natural1" },
+          palettes: [{
+            color: "#A83030",
+            colorIntensity: 70,
+            texture: "matte",
+            thickness: 30,
+            smoothness: 60,
+          }],
+        });
+        break;
+
+      // ── Eyes ──────────────────────────────────────────────────────────────
+      case "eye_shadow":
+        effects.push({
+          category: "eye_shadow",
+          pattern: { name: "1color1" },
+          palettes: [{ color: "#8B7355", colorIntensity: 60, texture: "matte" }],
+        });
+        break;
+
+      case "eye_liner":
+        effects.push({
+          category: "eye_liner",
+          pattern: { name: "Arabic3" },
+          palettes: [{ color: "#2C2C2C", colorIntensity: 80, texture: "matte" }],
+        });
+        break;
+
+      case "eyelashes":
+        // Eyelashes: no texture field.
+        effects.push({
+          category: "eyelashes",
+          pattern: { name: "Upper1" },
+          palettes: [{ color: "#1A1A1A", colorIntensity: 90 }],
+        });
+        break;
+
+      case "eyebrows":
+        // type:"color" = keep user's own brow shape, just tint it.
+        effects.push({
+          category: "eyebrows",
+          pattern: { type: "color" },
+          palettes: [{ color: "#5C4033", colorIntensity: 60, texture: "matte" }],
+        });
+        break;
+    }
+  }
+
+  return effects;
+}
+
+const VALID_SLOTS = Object.keys(SLOT_TO_PC_CATEGORY);
 
 const requestBody = z.object({ prompt: z.string().min(1).max(280) });
 
@@ -122,35 +284,42 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const usedSlots = new Set<string>();
     const picks = orchestration.products.filter((pick) => {
       if (!ownedIds.has(pick.product_id)) return false;
-      if (!SLOT_TO_EFFECT[pick.slot]) return false;
+      if (!SLOT_TO_PC_CATEGORY[pick.slot]) return false;
       if (usedSlots.has(pick.slot)) return false;
       usedSlots.add(pick.slot);
       return true;
     });
-
-    const effectList = picks.map((pick) => ({
-      feature_name: SLOT_TO_EFFECT[pick.slot],
-    }));
 
     const lookId = crypto.randomUUID();
     let resultStoragePath: string | null = null;
 
     if (picks.length > 0) {
       try {
-        const { data: selfie, error: dlErr } = await supabase.storage
+        // Use Supabase Image Transform to resize to ≤ 1920×1920 on download
+        // (PC makeup-vto rejects images larger than 1920×1920px).
+        const { data: urlData, error: urlErr } = await supabase.storage
           .from("selfies")
-          .download(profile.saved_selfie_url);
-        if (dlErr || !selfie) throw dlErr ?? new Error("no selfie blob");
-        const bytes = new Uint8Array(await selfie.arrayBuffer());
-        const contentType = selfie.type || "image/jpeg";
-        const fileName = profile.saved_selfie_url.split("/").pop() ?? "selfie.jpg";
+          .createSignedUrl(profile.saved_selfie_url, 120, {
+            transform: { width: 1920, height: 1920, resize: "contain" },
+          });
+        if (urlErr || !urlData?.signedUrl) {
+          throw urlErr ?? new Error("failed to create signed url for selfie");
+        }
+        const selfieRes = await fetch(urlData.signedUrl);
+        if (!selfieRes.ok) throw new Error(`selfie download ${selfieRes.status}`);
+        const bytes = new Uint8Array(await selfieRes.arrayBuffer());
+        const contentType = "image/jpeg";
+        const fileName = "selfie.jpg";
 
         const resultUrl = await runPerfectCorpTask({
-          featureName: "ai-makeup",
+          featureName: "makeup-vto",
           bytes,
           contentType,
           fileName,
-          taskParams: { params: { effect_list: effectList } },
+          taskParams: {
+            effects: buildEffects(picks, profile.skin_tone_data),
+            version: "1.0",
+          },
         });
 
         const imgRes = await fetch(resultUrl);

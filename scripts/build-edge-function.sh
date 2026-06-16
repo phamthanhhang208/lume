@@ -33,6 +33,12 @@ case "$NAME" in
   extract-ingredients)
     MODULES=(cors.ts supabase.ts gemini.ts prompts.ts schemas.ts)
     ;;
+  extract-front-info)
+    MODULES=(cors.ts supabase.ts gemini.ts prompts.ts schemas.ts)
+    ;;
+  search-ingredients)
+    MODULES=(cors.ts supabase.ts gemini.ts prompts.ts schemas.ts)
+    ;;
   analyze-skin)
     MODULES=(cors.ts supabase.ts perfectcorp.ts schemas.ts)
     ;;
