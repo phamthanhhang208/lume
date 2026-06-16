@@ -15,13 +15,21 @@ export default function SignIn() {
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     signIn.mutate(email, {
-      onSuccess: () => setSubmitted(true),
+      onSuccess: () => {
+        pendo.track("magic_link_sent", {
+          email_domain: email.split("@")[1] || "",
+        });
+        setSubmitted(true);
+      },
     });
   };
 
   const onDemoLogin = () => {
     demoSignIn.mutate(undefined, {
-      onSuccess: () => navigate("/dashboard", { replace: true }),
+      onSuccess: () => {
+        pendo.track("demo_sign_in_completed");
+        navigate("/dashboard", { replace: true });
+      },
     });
   };
 

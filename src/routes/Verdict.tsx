@@ -152,7 +152,21 @@ export default function Verdict() {
           urls={selfieUrls.data ?? {}}
           isPending={simulate.isPending}
           error={simulate.error?.message ?? null}
-          onSimulate={() => simulate.mutate({ scanId: scan.data!.id })}
+          onSimulate={() =>
+            simulate.mutate(
+              { scanId: scan.data!.id },
+              {
+                onSuccess: (result) => {
+                  pendo.track("skin_simulation_completed", {
+                    scan_id: scan.data!.id,
+                    cached: result.cached,
+                    has_simulation_image: !!result.simulationImageUrl,
+                    concerns_simulated: result.concernsSimulated.join(","),
+                  });
+                },
+              },
+            )
+          }
         />
       )}
 

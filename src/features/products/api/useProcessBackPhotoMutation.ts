@@ -38,13 +38,22 @@ export function useProcessBackPhotoMutation() {
         );
         if (error) throw error;
         if (data?.error) throw new Error(`${data.error.code}: ${data.error.message}`);
+        const ingredients = data?.data?.ingredients ?? [];
+        pendo.track("back_photo_processed", {
+          ingredient_count: ingredients.length,
+          ocr_fell_back: false,
+        });
         return {
           backStoragePath: back.storagePath,
-          ingredients: data?.data?.ingredients ?? [],
+          ingredients,
           ocrFellBack: false,
         };
       } catch (err) {
         console.warn("ingredient OCR failed, user will type in:", err);
+        pendo.track("back_photo_processed", {
+          ingredient_count: 0,
+          ocr_fell_back: true,
+        });
         return {
           backStoragePath: back.storagePath,
           ingredients: [],

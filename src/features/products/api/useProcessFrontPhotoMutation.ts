@@ -128,7 +128,7 @@ export function useProcessFrontPhotoMutation() {
         runFrontInfoExtract(original.storagePath, input.category),
       ]);
 
-      return {
+      const result: ProcessFrontResult = {
         originalStoragePath: original.storagePath,
         stickerStoragePath: bg.stickerStoragePath,
         stickerFellBack: bg.fellBack,
@@ -138,6 +138,17 @@ export function useProcessFrontPhotoMutation() {
         shade: extracted.shade,
         extractFellBack: extracted.fellBack,
       };
+
+      pendo.track("front_photo_processed", {
+        category: input.category,
+        sticker_fell_back: bg.fellBack,
+        extract_fell_back: extracted.fellBack,
+        extracted_name: extracted.name ?? "",
+        extracted_brand: extracted.brand ?? "",
+        extracted_subcategory: extracted.subcategory ?? "",
+      });
+
+      return result;
     },
   });
 }

@@ -126,7 +126,19 @@ export default function PreviewStep({ userId, onSaved }: PreviewStepProps) {
         stickerStoragePath,
         ingredients,
       },
-      { onSuccess: onSaved },
+      {
+        onSuccess: () => {
+          pendo.track("product_created", {
+            category: category,
+            subcategory: subcategory || "",
+            has_brand: !!brand,
+            has_shade: !!shade,
+            ingredient_count: ingredients.length,
+            ingredient_source: ingredientSource,
+          });
+          onSaved();
+        },
+      },
     );
   };
 

@@ -46,6 +46,9 @@ export default function ProductDetail() {
 
   const saveEdit = () => {
     if (!product.data) return;
+    const trimmedIngredients = ingredients
+      .map((i) => i.trim())
+      .filter((i) => i.length > 0);
     updateProduct.mutate(
       {
         productId: product.data.id,
@@ -53,12 +56,25 @@ export default function ProductDetail() {
         brand: brand.trim() || null,
         subcategory: subcategory || null,
         shade: shade.trim() || null,
-        ingredients: ingredients
-          .map((i) => i.trim())
-          .filter((i) => i.length > 0),
+        ingredients: trimmedIngredients,
       },
       {
-        onSuccess: () => setIsEditing(false),
+        onSuccess: () => {
+          const changed: string[] = [];
+          if (name.trim() !== product.data!.name) changed.push("name");
+          if ((brand.trim() || null) !== product.data!.brand) changed.push("brand");
+          if ((subcategory || null) !== product.data!.subcategory) changed.push("subcategory");
+          if ((shade.trim() || null) !== product.data!.shade) changed.push("shade");
+          if (JSON.stringify(trimmedIngredients) !== JSON.stringify(product.data!.ingredients))
+            changed.push("ingredients");
+          pendo.track("product_updated", {
+            product_id: product.data!.id,
+            category: product.data!.category,
+            fields_changed: changed.join(","),
+            ingredient_count: trimmedIngredients.length,
+          });
+          setIsEditing(false);
+        },
       },
     );
   };
@@ -71,7 +87,16 @@ export default function ProductDetail() {
     if (!confirmed) return;
     deleteProduct.mutate(
       { productId: product.data.id, userId: user.id },
-      { onSuccess: () => navigate("/dashboard") },
+      {
+        onSuccess: () => {
+          pendo.track("product_deleted", {
+            product_id: product.data!.id,
+            category: product.data!.category,
+            has_verdict: !!verdict,
+          });
+          navigate("/dashboard");
+        },
+      },
     );
   };
 

@@ -32,7 +32,21 @@ export default function Look() {
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!prompt.trim()) return;
-    generate.mutate(prompt.trim(), { onSuccess: (look) => setLatest(look) });
+    generate.mutate(prompt.trim(), {
+      onSuccess: (look) => {
+        pendo.track("look_generated", {
+          prompt: look.prompt.substring(0, 100),
+          prompt_length: look.prompt.length,
+          products_used_count: look.products_used.length,
+          product_slots: look.products_used.map((p) => p.slot).join(","),
+          gaps_count: look.gaps.length,
+          gaps: look.gaps.join(",").substring(0, 200),
+          has_vto_image: !!look.result_image_url,
+          used_suggestion: SUGGESTIONS.includes(prompt.trim()),
+        });
+        setLatest(look);
+      },
+    });
   };
 
   return (

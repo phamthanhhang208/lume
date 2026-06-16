@@ -21,6 +21,20 @@ export default function Dashboard() {
   const hasScan = !!latestScan.data;
   const canAnalyze = hasProducts && hasScan;
 
+  const onAnalyzeRoutine = () => {
+    generateVerdict.mutate(undefined, {
+      onSuccess: (verdicts) => {
+        pendo.track("verdict_generated", {
+          verdict_count: verdicts.length,
+          works_count: verdicts.filter((v) => v.verdict === "works").length,
+          neutral_count: verdicts.filter((v) => v.verdict === "neutral").length,
+          skip_count: verdicts.filter((v) => v.verdict === "skip").length,
+          product_count: products.data?.length ?? 0,
+        });
+      },
+    });
+  };
+
   const hour = new Date().getHours();
   const greeting =
     hour < 12 ? "good morning" : hour < 17 ? "good afternoon" : "good evening";
@@ -125,7 +139,7 @@ export default function Dashboard() {
           {canAnalyze && (
             <button
               type="button"
-              onClick={() => generateVerdict.mutate()}
+              onClick={onAnalyzeRoutine}
               disabled={!canAnalyze || generateVerdict.isPending}
               className="rounded-full border border-black/20 px-3 py-1 font-mono text-[9px] uppercase tracking-[0.06em] text-ink disabled:opacity-40"
             >
@@ -293,7 +307,7 @@ export default function Dashboard() {
                 {canAnalyze && (
                   <button
                     type="button"
-                    onClick={() => generateVerdict.mutate()}
+                    onClick={onAnalyzeRoutine}
                     disabled={generateVerdict.isPending}
                     className="rounded-full px-3 py-1.5 font-mono text-[9px] font-bold uppercase tracking-[0.08em] text-white disabled:opacity-40"
                     style={{ background: "#E37B8C" }}

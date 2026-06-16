@@ -42,6 +42,13 @@ export function useSearchIngredientsMutation() {
         }
         const result = data?.data;
         if (!result) throw new Error("no result");
+        pendo.track("ingredient_search_completed", {
+          query_name: input.name,
+          query_brand: input.brand ?? "",
+          result_count: result.ingredients.length,
+          source: result.source,
+          match_name: result.match_name ?? "",
+        });
         return {
           ingredients: result.ingredients,
           source: result.source,

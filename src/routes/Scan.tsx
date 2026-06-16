@@ -29,6 +29,7 @@ export default function Scan() {
 
   const onUseSaved = () => {
     if (!profile.data?.saved_selfie_url) return;
+    const isRescan = !!latestScan.data;
     analyze.mutate(
       {
         source: "saved",
@@ -37,11 +38,24 @@ export default function Scan() {
         needsToneAnalysis: !profile.data.skin_tone_data,
         needsFaceAnalysis: !profile.data.face_data,
       },
-      { onSuccess: () => setMode("view") },
+      {
+        onSuccess: (scan) => {
+          pendo.track("skin_scan_completed", {
+            selfie_source: "saved",
+            overall_score: scan.overall_score,
+            skin_age: scan.skin_age,
+            needs_tone_analysis: !profile.data?.skin_tone_data,
+            needs_face_analysis: !profile.data?.face_data,
+            is_rescan: isRescan,
+          });
+          setMode("view");
+        },
+      },
     );
   };
 
   const onCaptureConfirm = (blob: Blob) => {
+    const isRescan = !!latestScan.data;
     analyze.mutate(
       {
         source: "new",
@@ -50,7 +64,19 @@ export default function Scan() {
         needsToneAnalysis: !profile.data?.skin_tone_data,
         needsFaceAnalysis: !profile.data?.face_data,
       },
-      { onSuccess: () => setMode("view") },
+      {
+        onSuccess: (scan) => {
+          pendo.track("skin_scan_completed", {
+            selfie_source: "new",
+            overall_score: scan.overall_score,
+            skin_age: scan.skin_age,
+            needs_tone_analysis: !profile.data?.skin_tone_data,
+            needs_face_analysis: !profile.data?.face_data,
+            is_rescan: isRescan,
+          });
+          setMode("view");
+        },
+      },
     );
   };
 

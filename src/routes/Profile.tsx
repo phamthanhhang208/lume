@@ -8,7 +8,17 @@ export default function Profile() {
 
   const settings = [
     { label: "magic link sign-in", right: user?.email ?? "—" },
-    { label: "sign out", right: "→", danger: true, action: () => signOut.mutate() },
+    {
+      label: "sign out",
+      right: "→",
+      danger: true,
+      action: () =>
+        signOut.mutate(undefined, {
+          onSuccess: () => {
+            pendo.track("sign_out_completed");
+          },
+        }),
+    },
   ];
 
   return (
