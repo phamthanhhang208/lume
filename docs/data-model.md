@@ -103,13 +103,14 @@ A generated makeup look.
 
 | Column           | Type        | Notes                                                                 |
 | ---------------- | ----------- | --------------------------------------------------------------------- |
-| id               | uuid (PK)   | default gen_random_uuid()                                             |
-| user_id          | uuid (FK)   | References `auth.users.id`                                            |
-| prompt           | text        | The user's input, e.g. "clean girl makeup"                            |
-| result_image_url | text        | URL into Supabase Storage. VTO output                                 |
-| products_used    | jsonb       | Array of `{product_id, slot}` where slot is "foundation"/"blush"/etc. |
-| gemini_reasoning | text        | Nullable. Why Gemini picked these products                            |
-| created_at       | timestamptz | default now()                                                         |
+| id                  | uuid (PK)   | default gen_random_uuid()                                             |
+| user_id             | uuid (FK)   | References `auth.users.id`                                            |
+| prompt              | text        | The user's input, e.g. "clean girl makeup", or `steal: <title>`       |
+| result_image_url    | text        | Path under `looks` bucket. VTO / Makeup Transfer output               |
+| reference_image_url | text \| null | Path under `looks` bucket to the "steal this look" reference photo. Null for prompt-generated looks. |
+| products_used       | jsonb       | Array of `{product_id, slot}` where slot is "foundation"/"blush"/etc. |
+| gemini_reasoning    | text        | Nullable. Why Gemini picked these products                            |
+| created_at          | timestamptz | default now()                                                         |
 
 Indexes: `(user_id, created_at desc)`.
 
