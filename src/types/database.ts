@@ -51,6 +51,7 @@ export interface Scan {
   overall_score: number;
   raw_response: unknown;
   simulation_image_url: string | null;
+  aging_image_url: string | null;
   created_at: string;
 }
 

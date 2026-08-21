@@ -53,6 +53,7 @@ A user's skin analysis result at a point in time.
 | overall_score         | int         | Aggregate score from API                                                                                             |
 | raw_response          | jsonb       | Full API response, kept for debugging and re-analysis                                                                |
 | simulation_image_url  | text \| null | Path under `selfies` bucket to the Perfect Corp Skin Simulation result, if the user has tapped "preview my skin". Cached after first generation. |
+| aging_image_url       | text \| null | Path under `selfies` bucket to the Perfect Corp AI Aging result (oldest frame of the series). Cached after first generation. |
 | created_at            | timestamptz | default now()                                                                                                        |
 
 The `metrics` JSON structure (locked in once we verify against Perfect Corp's response):

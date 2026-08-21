@@ -24,27 +24,17 @@ import { z } from "npm:zod@4";
 
 import { errorResponse, jsonResponse, preflight } from "../_shared/cors.ts";
 import { callGeminiJson } from "../_shared/gemini.ts";
+import {
+  buildMakeupEffects,
+  SLOT_TO_LEGACY_EFFECT,
+  VALID_MAKEUP_SLOTS,
+} from "../_shared/makeup.ts";
 import { runPerfectCorpTask } from "../_shared/perfectcorp.ts";
 import { lookPrompt, lookPromptStricter } from "../_shared/prompts.ts";
 import { lookOrchestration } from "../_shared/schemas.ts";
 import { requireUser } from "../_shared/supabase.ts";
 
-const SLOT_TO_EFFECT: Record<string, string> = {
-  foundation: "FoundationEffect",
-  concealer: "ConcealerEffect",
-  blush: "BlushEffect",
-  bronzer: "BronzerEffect",
-  contour: "ContourEffect",
-  highlighter: "HighlighterEffect",
-  lipstick: "LipColorEffect",
-  "lip liner": "LipLinerEffect",
-  eyeshadow: "EyeshadowEffect",
-  eyeliner: "EyelinerEffect",
-  eyelash: "EyelashesEffect",
-  eyebrow: "EyebrowsEffect",
-};
-
-const VALID_SLOTS = Object.keys(SLOT_TO_EFFECT);
+const VALID_SLOTS = VALID_MAKEUP_SLOTS;
 
 const requestBody = z.object({ prompt: z.string().min(1).max(280) });
 
@@ -79,7 +69,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     const { data: products, error: productsErr } = await supabase
       .from("products")
-      .select("id, name, brand, subcategory")
+      .select("id, name, brand, subcategory, shade")
       .eq("category", "makeup");
     if (productsErr) throw productsErr;
     if (!products || products.length === 0) {
@@ -107,6 +97,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
               properties: {
                 product_id: { type: "STRING" },
                 slot: { type: "STRING" },
+                color: { type: "STRING", nullable: true },
               },
               required: ["product_id", "slot"],
             },
@@ -122,15 +113,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const usedSlots = new Set<string>();
     const picks = orchestration.products.filter((pick) => {
       if (!ownedIds.has(pick.product_id)) return false;
-      if (!SLOT_TO_EFFECT[pick.slot]) return false;
+      if (!SLOT_TO_LEGACY_EFFECT[pick.slot]) return false;
       if (usedSlots.has(pick.slot)) return false;
       usedSlots.add(pick.slot);
       return true;
     });
-
-    const effectList = picks.map((pick) => ({
-      feature_name: SLOT_TO_EFFECT[pick.slot],
-    }));
 
     const lookId = crypto.randomUUID();
     let resultStoragePath: string | null = null;
@@ -145,13 +132,36 @@ Deno.serve(async (req: Request): Promise<Response> => {
         const contentType = selfie.type || "image/jpeg";
         const fileName = profile.saved_selfie_url.split("/").pop() ?? "selfie.jpg";
 
-        const resultUrl = await runPerfectCorpTask({
-          featureName: "ai-makeup",
-          bytes,
-          contentType,
-          fileName,
-          taskParams: { params: { effect_list: effectList } },
-        });
+        // Primary: makeup-vto with the color-aware effects dialect.
+        // Fallback: legacy ai-makeup effect_list if the new payload is
+        // rejected (only the file upload is repeated; failed creates cost
+        // no task units).
+        const effects = buildMakeupEffects(
+          picks.map((pick) => ({ slot: pick.slot, color: pick.color ?? null })),
+          faceShape,
+        );
+        let resultUrl: string;
+        try {
+          resultUrl = await runPerfectCorpTask({
+            featureName: "makeup-vto",
+            bytes,
+            contentType,
+            fileName,
+            taskParams: { version: "1.0", effects },
+          });
+        } catch (vtoErr) {
+          console.warn("makeup-vto failed; falling back to legacy ai-makeup:", vtoErr);
+          const effectList = picks.map((pick) => ({
+            feature_name: SLOT_TO_LEGACY_EFFECT[pick.slot],
+          }));
+          resultUrl = await runPerfectCorpTask({
+            featureName: "ai-makeup",
+            bytes,
+            contentType,
+            fileName,
+            taskParams: { params: { effect_list: effectList } },
+          });
+        }
 
         const imgRes = await fetch(resultUrl);
         if (!imgRes.ok) throw new Error(`fetch vto ${imgRes.status}: ${imgRes.statusText}`);

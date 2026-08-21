@@ -54,6 +54,14 @@ export const verdictList = z.array(verdictItem);
 export const lookPick = z.object({
   product_id: z.string().uuid(),
   slot: z.string().min(1),
+  // Hex color inferred from the product's name/shade, used to drive the
+  // makeup-vto palette. Null when the model can't infer one.
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .nullable()
+    .optional()
+    .default(null),
 });
 export type LookPick = z.infer<typeof lookPick>;
 export const lookOrchestration = z.object({

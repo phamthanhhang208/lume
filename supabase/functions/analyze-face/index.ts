@@ -37,7 +37,14 @@ function summarize(raw: unknown): FaceSummary {
     (obj.result as Record<string, unknown> | undefined) ??
     (obj.face as Record<string, unknown> | undefined) ??
     obj;
-  const shape = pickString(result, "face_shape", "faceShape", "shape");
+  // face-attr-analysis nests each requested feature; faceShape may be a
+  // bare string or an object like { value: "oval" }.
+  const featureNode = (result as Record<string, unknown>).faceShape ?? result;
+  const shape =
+    typeof featureNode === "string"
+      ? featureNode
+      : pickString(featureNode, "value", "face_shape", "faceShape", "shape") ??
+        pickString(result, "face_shape", "faceShape", "shape");
   return { face_shape: shape ? shape.toLowerCase() : null };
 }
 
@@ -77,10 +84,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const fileName = storagePath.split("/").pop() ?? "selfie.jpg";
 
     const resultUrl = await runPerfectCorpTask({
-      featureName: "face-analyzer",
+      featureName: "face-attr-analysis",
       bytes,
       contentType,
       fileName,
+      taskParams: { features: ["faceShape"] },
     });
 
     const resultRes = await fetch(resultUrl);

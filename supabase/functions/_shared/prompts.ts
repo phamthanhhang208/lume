@@ -176,6 +176,7 @@ interface LookProductCtx {
   name: string;
   brand: string | null;
   subcategory: string | null;
+  shade?: string | null;
 }
 
 function formatLookProducts(products: LookProductCtx[]): string {
@@ -184,7 +185,7 @@ function formatLookProducts(products: LookProductCtx[]): string {
       (product) =>
         `- id: ${product.id} | ${product.subcategory ?? "?"} | ${product.name}${
           product.brand ? ` (${product.brand})` : ""
-        }`,
+        }${product.shade ? ` | shade: ${product.shade}` : ""}`,
     )
     .join("\n");
 }
@@ -209,7 +210,7 @@ ${formatLookProducts(products)}
 VALID SLOTS: ${validSlots.join(", ")}
 
 Return a JSON object with:
-- products: array of {"product_id": <id>, "slot": <one of VALID SLOTS>}
+- products: array of {"product_id": <id>, "slot": <one of VALID SLOTS>, "color": <hex "#RRGGBB" or null>}
 - reasoning: 1-3 sentences on why these picks fit the look${
     faceShape ? " (mention face shape if it influenced a pick)" : ""
   }
@@ -219,6 +220,7 @@ Rules:
 - Only use product_ids from OWNED MAKEUP PRODUCTS.
 - Each slot appears at most once across products[].
 - Prefer products whose subcategory naturally matches the slot.
+- color: infer the actual product color from its name/shade (e.g. shade "Ruby Woo" is a blue-red like "#B01030"). Return null if the name gives no color clue. Never invent a color for colorless products.
 - If nothing matches, return an empty products array with gaps explaining what's missing.`;
 }
 
@@ -229,8 +231,8 @@ export function lookPromptStricter(
   faceShape: string | null,
 ): string {
   const facePart = faceShape ? `\nFACE SHAPE: ${faceShape}\n` : "";
-  return `Return ONLY a JSON object: {"products":[{"product_id":string,"slot":string}],"reasoning":string,"gaps":string[]}.
-slot MUST be one of: ${validSlots.join(", ")}. product_id MUST come from the list below.
+  return `Return ONLY a JSON object: {"products":[{"product_id":string,"slot":string,"color":string|null}],"reasoning":string,"gaps":string[]}.
+slot MUST be one of: ${validSlots.join(", ")}. product_id MUST come from the list below. color is "#RRGGBB" inferred from the product shade/name, or null.
 
 USER PROMPT: ${userPrompt}
 ${facePart}

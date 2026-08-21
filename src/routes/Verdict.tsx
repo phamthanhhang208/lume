@@ -4,6 +4,7 @@ import VerdictTag from "@/components/ui/VerdictTag";
 import { useProducts } from "@/features/products/api/useProducts";
 import { useLatestScan } from "@/features/scans/api/useLatestScan";
 import { useSelfieSignedUrls } from "@/features/scans/api/useSelfieSignedUrls";
+import { useSimulateAgingMutation } from "@/features/scans/api/useSimulateAgingMutation";
 import { useSimulateSkinMutation } from "@/features/scans/api/useSimulateSkinMutation";
 import { useLatestVerdicts } from "@/features/verdicts/api/useLatestVerdicts";
 
@@ -12,9 +13,11 @@ export default function Verdict() {
   const verdicts = useLatestVerdicts();
   const products = useProducts();
   const simulate = useSimulateSkinMutation();
+  const simulateAging = useSimulateAgingMutation();
   const selfieUrls = useSelfieSignedUrls([
     scan.data?.image_url,
     scan.data?.simulation_image_url,
+    scan.data?.aging_image_url,
   ]);
 
   if (verdicts.isPending || products.isPending || scan.isPending) {
@@ -145,14 +148,37 @@ export default function Verdict() {
 
       {/* Skin simulation preview */}
       {scan.data && (
-        <SimulationSection
-          scanId={scan.data.id}
+        <BeforeAfterCard
+          title="your skin in 4 weeks"
+          idleTitle="preview your skin in 4 weeks"
+          description="Perfect Corp simulation of your low-scoring concerns improving with consistent routine. estimates, not guarantees."
+          idleDescription="we'll simulate how your skin could look after sticking with the works pile."
+          afterCaption="4 weeks"
+          buttonLabel="preview your skin in 4 weeks"
           selfiePath={scan.data.image_url}
-          simulationPath={scan.data.simulation_image_url}
+          afterPath={scan.data.simulation_image_url}
           urls={selfieUrls.data ?? {}}
           isPending={simulate.isPending}
           error={simulate.error?.message ?? null}
-          onSimulate={() => simulate.mutate({ scanId: scan.data!.id })}
+          onGenerate={() => simulate.mutate({ scanId: scan.data!.id })}
+        />
+      )}
+
+      {/* Aging preview */}
+      {scan.data && (
+        <BeforeAfterCard
+          title="fast forward"
+          idleTitle="fast forward a few decades"
+          description="Perfect Corp AI aging simulation — a generic preview of facial aging, not conditioned on your routine. skincare habits still matter, but this image doesn't measure them."
+          idleDescription="curious? see an AI aging simulation of your selfie. it's generic — not a prediction based on your routine."
+          afterCaption="older you"
+          buttonLabel="see your future face"
+          selfiePath={scan.data.image_url}
+          afterPath={scan.data.aging_image_url}
+          urls={selfieUrls.data ?? {}}
+          isPending={simulateAging.isPending}
+          error={simulateAging.error?.message ?? null}
+          onGenerate={() => simulateAging.mutate({ scanId: scan.data!.id })}
         />
       )}
 
@@ -177,41 +203,50 @@ export default function Verdict() {
   );
 }
 
-interface SimulationSectionProps {
-  scanId: string;
+interface BeforeAfterCardProps {
+  title: string;
+  idleTitle: string;
+  description: string;
+  idleDescription: string;
+  afterCaption: string;
+  buttonLabel: string;
   selfiePath: string;
-  simulationPath: string | null;
+  afterPath: string | null;
   urls: Record<string, string>;
   isPending: boolean;
   error: string | null;
-  onSimulate: () => void;
+  onGenerate: () => void;
 }
 
-function SimulationSection({
+function BeforeAfterCard({
+  title,
+  idleTitle,
+  description,
+  idleDescription,
+  afterCaption,
+  buttonLabel,
   selfiePath,
-  simulationPath,
+  afterPath,
   urls,
   isPending,
   error,
-  onSimulate,
-}: SimulationSectionProps) {
+  onGenerate,
+}: BeforeAfterCardProps) {
   const beforeUrl = urls[selfiePath];
-  const afterUrl = simulationPath ? urls[simulationPath] : null;
-  const hasSimulation = !!simulationPath;
+  const afterUrl = afterPath ? urls[afterPath] : null;
+  const hasResult = !!afterPath;
 
   return (
     <div className="mx-4 mt-6 lg:mx-auto lg:max-w-3xl lg:px-4">
       <div className="rounded-2xl border border-black/[0.08] bg-white p-4">
         <h3 className="font-hand text-xl font-semibold text-ink">
-          {hasSimulation ? "your skin in 4 weeks" : "preview your skin in 4 weeks"}
+          {hasResult ? title : idleTitle}
         </h3>
         <p className="mt-1 font-sans text-xs text-ink-soft">
-          {hasSimulation
-            ? "Perfect Corp simulation of your low-scoring concerns improving with consistent routine. estimates, not guarantees."
-            : "we'll simulate how your skin could look after sticking with the works pile."}
+          {hasResult ? description : idleDescription}
         </p>
 
-        {hasSimulation && (
+        {hasResult && (
           <div className="mt-3 grid grid-cols-2 gap-2">
             <figure>
               {beforeUrl ? (
@@ -238,21 +273,21 @@ function SimulationSection({
                 <div className="aspect-square w-full rounded-xl bg-cream" />
               )}
               <figcaption className="mt-1 text-center font-mono text-[9px] uppercase tracking-[0.08em] text-ink-soft">
-                4 weeks
+                {afterCaption}
               </figcaption>
             </figure>
           </div>
         )}
 
-        {!hasSimulation && (
+        {!hasResult && (
           <button
             type="button"
-            onClick={onSimulate}
+            onClick={onGenerate}
             disabled={isPending}
             className="mt-3 w-full rounded-full py-3 font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-white disabled:opacity-40"
             style={{ background: "#7CB89C", boxShadow: "0 4px 14px rgba(124,184,156,.4)" }}
           >
-            {isPending ? "simulating… (~20s)" : "preview your skin in 4 weeks"}
+            {isPending ? "simulating… (~20s)" : buttonLabel}
           </button>
         )}
 

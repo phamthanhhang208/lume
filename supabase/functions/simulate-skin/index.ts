@@ -18,26 +18,30 @@ import { simulateSkinBody } from "../_shared/schemas.ts";
 import { requireUser } from "../_shared/supabase.ts";
 
 // Map our normalized metric keys (from analyze-skin/extractMetrics) to the
-// concern vocabulary that Perfect Corp Skin Simulation accepts. Keys we don't
-// have a clean mapping for (e.g. droopy_eyelid) are left out — those concerns
-// just won't be simulated.
-const METRIC_TO_CONCERN: Record<string, string> = {
+// Skin Simulation task params. Each param is a float 0.0-1.0 sent at the top
+// level of the task body, where 1.0 means "most improved". Keys without a
+// clean mapping (droopy_eyelid, moisture, firmness) are left out, and
+// oiliness is deliberately excluded — for that param 1.0 ADDS shine.
+const METRIC_TO_SIM_PARAM: Record<string, string> = {
   wrinkle: "wrinkle",
-  pore: "pore",
+  pore: "pores",
   acne: "acne",
   redness: "redness",
   dark_circle: "dark_circle",
-  eye_bag: "eye_bag",
-  firmness: "firmness",
+  eye_bag: "eye_bags",
   radiance: "radiance",
-  age_spot: "age_spot",
+  age_spot: "spots",
   texture: "texture",
-  oiliness: "oiliness",
-  moisture: "moisture",
 };
 
 const LOW_SCORE_CUTOFF = 60;
 const MAX_CONCERNS = 5;
+
+/** Lower score → stronger simulated improvement, clamped to [0.3, 1]. */
+function improvementIntensity(score: number): number {
+  const raw = (100 - score) / 100;
+  return Math.round(Math.min(1, Math.max(0.3, raw)) * 100) / 100;
+}
 
 Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") return preflight();
@@ -81,17 +85,21 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
 
     const metrics = (scan.metrics ?? {}) as Record<string, unknown>;
-    const concerns = Object.entries(metrics)
+    const lowMetrics = Object.entries(metrics)
       .filter(
         (entry): entry is [string, number] =>
-          entry[0] in METRIC_TO_CONCERN &&
+          entry[0] in METRIC_TO_SIM_PARAM &&
           typeof entry[1] === "number" &&
           Number.isFinite(entry[1]) &&
           entry[1] < LOW_SCORE_CUTOFF,
       )
       .sort(([, a], [, b]) => a - b)
-      .slice(0, MAX_CONCERNS)
-      .map(([key]) => METRIC_TO_CONCERN[key]);
+      .slice(0, MAX_CONCERNS);
+    const simParams: Record<string, number> = {};
+    for (const [key, score] of lowMetrics) {
+      simParams[METRIC_TO_SIM_PARAM[key]] = improvementIntensity(score);
+    }
+    const concerns = lowMetrics.map(([key]) => key);
 
     if (concerns.length === 0) {
       return jsonResponse({
@@ -118,7 +126,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       bytes,
       contentType,
       fileName,
-      taskParams: { params: { concerns } },
+      taskParams: simParams,
     });
 
     const imgRes = await fetch(resultUrl);
