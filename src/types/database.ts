@@ -70,6 +70,7 @@ export interface Look {
   user_id: string;
   prompt: string;
   result_image_url: string | null;
+  reference_image_url: string | null;
   products_used: Array<{ product_id: string; slot: string }>;
   gemini_reasoning: string | null;
   created_at: string;

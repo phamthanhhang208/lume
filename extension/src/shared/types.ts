@@ -14,10 +14,36 @@ export interface TryFromWebInput {
   page_url?: string;
 }
 
+export interface TransferLookInput {
+  image_url: string;
+  page_title?: string;
+}
+
+export interface TransferLookResult {
+  look: {
+    id: string;
+    prompt: string;
+    result_image_url: string | null;
+    reference_image_url: string | null;
+    products_used: Array<{ product_id: string; slot: string }>;
+    gemini_reasoning: string | null;
+    gaps: string[];
+  };
+  signed: {
+    result: string | null;
+    reference: string | null;
+  };
+}
+
 export type SidePanelMessage =
   | {
       type: "TRY_PRODUCT";
       imageUrl: string;
       pageUrl?: string;
+      pageTitle?: string;
+    }
+  | {
+      type: "STEAL_LOOK";
+      imageUrl: string;
       pageTitle?: string;
     };

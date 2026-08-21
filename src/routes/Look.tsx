@@ -1,6 +1,7 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { Link } from "react-router";
 
+import { useAuth } from "@/features/auth/api/useAuth";
 import { useProducts } from "@/features/products/api/useProducts";
 import {
   useGenerateLookMutation,
@@ -8,6 +9,7 @@ import {
 } from "@/features/looks/api/useGenerateLookMutation";
 import { useLooks } from "@/features/looks/api/useLooks";
 import { useLookSignedUrls } from "@/features/looks/api/useLookSignedUrls";
+import { useTransferLookMutation } from "@/features/looks/api/useTransferLookMutation";
 import type { Look as LookRow, Product } from "@/types/database";
 
 const SUGGESTIONS = [
@@ -19,20 +21,39 @@ const SUGGESTIONS = [
 ];
 
 export default function Look() {
+  const { user } = useAuth();
   const [prompt, setPrompt] = useState("");
   const [latest, setLatest] = useState<GeneratedLook | null>(null);
   const generate = useGenerateLookMutation();
+  const transfer = useTransferLookMutation();
   const looks = useLooks();
   const products = useProducts();
-  const lookUrls = useLookSignedUrls(looks.data);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const allLooks = [
+    ...(latest ? [latest] : []),
+    ...(looks.data ?? []),
+  ];
+  const lookUrls = useLookSignedUrls(allLooks);
 
   const productsById: Record<string, Product> = {};
   for (const product of products.data ?? []) productsById[product.id] = product;
+
+  const busy = generate.isPending || transfer.isPending;
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!prompt.trim()) return;
     generate.mutate(prompt.trim(), { onSuccess: (look) => setLatest(look) });
+  };
+
+  const onReferencePicked = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !user) return;
+    transfer.mutate(
+      { userId: user.id, blob: file, title: file.name },
+      { onSuccess: (look) => setLatest(look) },
+    );
   };
 
   return (
@@ -127,12 +148,40 @@ export default function Look() {
           </div>
         </div>
 
+        {/* Steal a look */}
+        <div className="mt-4 rounded-2xl border border-black/[0.08] bg-white p-4">
+          <h2 className="font-hand text-xl font-semibold text-ink">or steal a look</h2>
+          <p className="mt-1 font-sans text-xs leading-relaxed text-ink-soft">
+            upload a photo of a makeup look you love — Perfect Corp transfers
+            it onto your selfie and we match it to products you own.
+          </p>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={onReferencePicked}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={busy || !user}
+            className="mt-3 w-full rounded-full border border-black/25 bg-transparent py-3 font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink disabled:opacity-40"
+          >
+            {transfer.isPending ? "transferring…" : "upload a reference photo"}
+          </button>
+        </div>
+
         {/* Generating indicator */}
-        {generate.isPending && (
+        {busy && (
           <div className="mt-4 rounded-xl border border-black/[0.08] bg-white px-4 py-4">
-            <div className="font-hand text-xl font-semibold text-ink">rendering your look…</div>
+            <div className="font-hand text-xl font-semibold text-ink">
+              {transfer.isPending ? "stealing that look…" : "rendering your look…"}
+            </div>
             <p className="mt-1 font-sans text-xs text-ink-soft">
-              Perfect Corp Makeup VTO · this can take 20–40 seconds.
+              {transfer.isPending
+                ? "Perfect Corp Makeup Transfer · this can take 20–40 seconds."
+                : "Perfect Corp Makeup VTO · this can take 20–40 seconds."}
             </p>
             <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-black/[0.06]">
               <div className="h-full w-1/2 rounded-full bg-terracotta-deep animate-pulse" />
@@ -140,16 +189,25 @@ export default function Look() {
           </div>
         )}
 
-        {/* Error */}
+        {/* Errors */}
         {generate.error && !generate.isPending && (
           <div className="mt-3 rounded-xl border border-rose bg-rose-pale px-4 py-3">
             <p className="font-sans text-xs text-rose-deep">{generate.error.message}</p>
           </div>
         )}
+        {transfer.error && !transfer.isPending && (
+          <div className="mt-3 rounded-xl border border-rose bg-rose-pale px-4 py-3">
+            <p className="font-sans text-xs text-rose-deep">{transfer.error.message}</p>
+          </div>
+        )}
 
         {/* Latest result */}
-        {latest && !generate.isPending && (
-          <LookResult look={latest} productsById={productsById} />
+        {latest && !busy && (
+          <LookResult
+            look={latest}
+            productsById={productsById}
+            urls={lookUrls.data ?? {}}
+          />
         )}
 
         {/* History */}
@@ -211,9 +269,14 @@ function SentBubble({ children }: { children: React.ReactNode }) {
 interface LookResultProps {
   look: GeneratedLook;
   productsById: Record<string, Product>;
+  urls: Record<string, string>;
 }
 
-function LookResult({ look, productsById }: LookResultProps) {
+function LookResult({ look, productsById, urls }: LookResultProps) {
+  const referenceUrl = look.reference_image_url
+    ? urls[look.reference_image_url]
+    : null;
+  const resultUrl = look.result_image_url ? urls[look.result_image_url] : null;
   return (
     <div className="mt-4 rounded-2xl border border-black/[0.10] bg-white p-4" style={{ boxShadow: "0 2px 6px rgba(20,18,14,.08), 0 12px 28px rgba(60,40,20,.14)" }}>
       <div className="mb-2 flex items-baseline justify-between">
@@ -232,7 +295,42 @@ function LookResult({ look, productsById }: LookResultProps) {
         </p>
       )}
 
-      {look.result_image_url ? (
+      {referenceUrl || resultUrl ? (
+        <div className="mb-3 grid grid-cols-2 gap-2">
+          <figure>
+            {referenceUrl ? (
+              <img
+                src={referenceUrl}
+                alt="reference look"
+                className="aspect-[3/4] w-full rounded-xl object-cover"
+              />
+            ) : (
+              <div className="flex aspect-[3/4] w-full items-center justify-center rounded-xl bg-cream font-mono text-[9px] text-ink-faint">
+                no reference
+              </div>
+            )}
+            <figcaption className="mt-1 text-center font-mono text-[9px] uppercase tracking-[0.08em] text-ink-soft">
+              the look
+            </figcaption>
+          </figure>
+          <figure>
+            {resultUrl ? (
+              <img
+                src={resultUrl}
+                alt="you wearing the look"
+                className="aspect-[3/4] w-full rounded-xl object-cover"
+              />
+            ) : (
+              <div className="flex aspect-[3/4] w-full items-center justify-center rounded-xl bg-cream font-mono text-[9px] text-ink-faint">
+                render unavailable
+              </div>
+            )}
+            <figcaption className="mt-1 text-center font-mono text-[9px] uppercase tracking-[0.08em] text-ink-soft">
+              on you
+            </figcaption>
+          </figure>
+        </div>
+      ) : look.result_image_url ? (
         <p className="mb-3 font-mono text-[10px] text-ink-soft">
           preview saved · see history below
         </p>

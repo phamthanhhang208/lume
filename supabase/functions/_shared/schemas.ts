@@ -24,6 +24,17 @@ export const simulateSkinBody = z.object({
 });
 export type SimulateSkinBody = z.infer<typeof simulateSkinBody>;
 
+export const transferLookBody = z
+  .object({
+    image_url: z.string().url().optional(),
+    storage_path: z.string().min(1).optional(),
+    page_title: z.string().max(280).optional(),
+  })
+  .refine((body) => !!body.image_url !== !!body.storage_path, {
+    message: "provide exactly one of image_url or storage_path",
+  });
+export type TransferLookBody = z.infer<typeof transferLookBody>;
+
 // ---------- AI response shapes ----------
 
 export const ingredientList = z.array(z.string());

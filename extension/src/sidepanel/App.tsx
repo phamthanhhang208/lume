@@ -1,16 +1,18 @@
 import { useEffect, useState } from "react";
 
-import { AuthRequiredError, tryFromWeb } from "@/shared/api";
+import { AuthRequiredError, transferLook, tryFromWeb } from "@/shared/api";
 import type {
   Classification,
   SidePanelMessage,
+  TransferLookResult,
   TryFromWebResult,
 } from "@/shared/types";
 
 type State =
   | { kind: "idle" }
-  | { kind: "loading"; imageUrl: string }
+  | { kind: "loading"; imageUrl: string; mode: "try" | "steal" }
   | { kind: "result"; imageUrl: string; result: TryFromWebResult }
+  | { kind: "steal-result"; imageUrl: string; result: TransferLookResult }
   | { kind: "error"; message: string; needsAuth: boolean };
 
 export default function App() {
@@ -19,15 +21,24 @@ export default function App() {
   useEffect(() => {
     const onMessage = async (raw: unknown) => {
       const msg = raw as SidePanelMessage | undefined;
-      if (!msg || msg.type !== "TRY_PRODUCT") return;
-      setState({ kind: "loading", imageUrl: msg.imageUrl });
+      if (!msg || (msg.type !== "TRY_PRODUCT" && msg.type !== "STEAL_LOOK")) return;
+      const mode = msg.type === "TRY_PRODUCT" ? "try" : "steal";
+      setState({ kind: "loading", imageUrl: msg.imageUrl, mode });
       try {
-        const result = await tryFromWeb({
-          image_url: msg.imageUrl,
-          page_title: msg.pageTitle,
-          page_url: msg.pageUrl,
-        });
-        setState({ kind: "result", imageUrl: msg.imageUrl, result });
+        if (msg.type === "TRY_PRODUCT") {
+          const result = await tryFromWeb({
+            image_url: msg.imageUrl,
+            page_title: msg.pageTitle,
+            page_url: msg.pageUrl,
+          });
+          setState({ kind: "result", imageUrl: msg.imageUrl, result });
+        } else {
+          const result = await transferLook({
+            image_url: msg.imageUrl,
+            page_title: msg.pageTitle,
+          });
+          setState({ kind: "steal-result", imageUrl: msg.imageUrl, result });
+        }
       } catch (err) {
         const needsAuth = err instanceof AuthRequiredError;
         const message = err instanceof Error ? err.message : String(err);
@@ -43,15 +54,18 @@ export default function App() {
       <h1>Lume</h1>
       {state.kind === "idle" && (
         <p className="muted">
-          Right-click any product image on a beauty site and choose{" "}
-          <strong>Try with Lume</strong>.
+          Right-click any image on a beauty site and choose{" "}
+          <strong>Try with Lume</strong> (a product) or{" "}
+          <strong>Steal this look with Lume</strong> (a makeup look you want).
         </p>
       )}
 
       {state.kind === "loading" && (
         <>
           <p>
-            Analyzing product… Skin Simulation can take 15–30 seconds.
+            {state.mode === "steal"
+              ? "Transferring that look onto your selfie… 20–40 seconds."
+              : "Analyzing product… Skin Simulation can take 15–30 seconds."}
           </p>
           <img src={state.imageUrl} alt="source" style={{ width: "100%" }} />
         </>
@@ -71,7 +85,52 @@ export default function App() {
       {state.kind === "result" && (
         <ResultView imageUrl={state.imageUrl} result={state.result} />
       )}
+
+      {state.kind === "steal-result" && (
+        <StealResultView imageUrl={state.imageUrl} result={state.result} />
+      )}
     </main>
+  );
+}
+
+interface StealResultViewProps {
+  imageUrl: string;
+  result: TransferLookResult;
+}
+
+function StealResultView({ imageUrl, result }: StealResultViewProps) {
+  const { look, signed } = result;
+  return (
+    <div className="result">
+      <p>
+        <span className="badge">Look stolen</span>
+      </p>
+      {look.gemini_reasoning && <p>{look.gemini_reasoning}</p>}
+      {signed.result ? (
+        <img src={signed.result} alt="the look on you" />
+      ) : (
+        <p className="muted">(no preview image — Makeup Transfer unavailable)</p>
+      )}
+      {look.products_used.length > 0 && (
+        <>
+          <p className="muted" style={{ marginTop: 8 }}>
+            From your shelf:
+          </p>
+          <ul>
+            {look.products_used.map(({ product_id, slot }) => (
+              <li key={`${product_id}-${slot}`}>{slot}</li>
+            ))}
+          </ul>
+        </>
+      )}
+      {look.gaps.length > 0 && (
+        <p className="muted">Missing from your shelf: {look.gaps.join(", ")}</p>
+      )}
+      <p className="muted" style={{ marginTop: 8 }}>
+        Saved to your looks history in the Lume app. Source:{" "}
+        <a href={imageUrl} target="_blank" rel="noreferrer">image</a>
+      </p>
+    </div>
   );
 }
 

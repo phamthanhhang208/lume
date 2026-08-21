@@ -8,7 +8,7 @@ export function useLookSignedUrls(looks: Look[] | undefined) {
   const paths = Array.from(
     new Set(
       (looks ?? [])
-        .map((look) => look.result_image_url)
+        .flatMap((look) => [look.result_image_url, look.reference_image_url])
         .filter((path): path is string => !!path),
     ),
   );

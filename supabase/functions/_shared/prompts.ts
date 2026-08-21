@@ -224,6 +224,41 @@ Rules:
 - If nothing matches, return an empty products array with gaps explaining what's missing.`;
 }
 
+export function stealLookPrompt(
+  products: LookProductCtx[],
+  validSlots: readonly string[],
+): string {
+  return `You are a makeup artist. The attached image shows a makeup look the user wants to recreate. Identify the makeup visible in the image, then match it against the products the user owns.
+
+OWNED MAKEUP PRODUCTS:
+${formatLookProducts(products)}
+
+VALID SLOTS: ${validSlots.join(", ")}
+
+Return a JSON object with:
+- products: array of {"product_id": <id>, "slot": <one of VALID SLOTS>, "color": <hex "#RRGGBB" seen in the image, or null>}
+- reasoning: 2-3 sentences describing the look and how the picks recreate it
+- gaps: array of slot names visible in the look that the user owns no suitable product for
+
+Rules:
+- Only use product_ids from OWNED MAKEUP PRODUCTS.
+- Each slot appears at most once across products[].
+- Only pick slots actually visible in the reference look.
+- color is the shade you see in the reference image for that slot.
+- A slot visible in the look with no owned match belongs in gaps, not products.`;
+}
+
+export function stealLookPromptStricter(
+  products: LookProductCtx[],
+  validSlots: readonly string[],
+): string {
+  return `Return ONLY a JSON object: {"products":[{"product_id":string,"slot":string,"color":string|null}],"reasoning":string,"gaps":string[]}.
+slot MUST be one of: ${validSlots.join(", ")}. product_id MUST come from the list below. color is "#RRGGBB" from the reference image or null.
+
+The image is a makeup look to recreate from the user's owned products:
+${formatLookProducts(products)}`;
+}
+
 export function lookPromptStricter(
   userPrompt: string,
   products: LookProductCtx[],

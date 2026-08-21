@@ -3,6 +3,21 @@ import { supabase } from "@/lib/supabase";
 const BUCKET = "looks";
 const SIGNED_URL_TTL = 60 * 60;
 
+export async function uploadLookReference(opts: {
+  userId: string;
+  blob: Blob;
+}): Promise<string> {
+  const storagePath = `${opts.userId}/references/${crypto.randomUUID()}.jpg`;
+  const { error } = await supabase.storage
+    .from(BUCKET)
+    .upload(storagePath, opts.blob, {
+      contentType: opts.blob.type || "image/jpeg",
+      upsert: false,
+    });
+  if (error) throw error;
+  return storagePath;
+}
+
 export async function createLookSignedUrl(storagePath: string): Promise<string> {
   const { data, error } = await supabase.storage
     .from(BUCKET)
