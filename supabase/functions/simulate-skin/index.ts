@@ -1,20 +1,28 @@
 // Edge Function: simulate-skin
 //
 // Input  : { scan_id: string }
-// Output : { data: { simulation_image_url, concerns_simulated, cached } }
+// Output : { data: { simulation_image_url, cached, routine_conditioned,
+//                    concerns_simulated, concerns_uncovered,
+//                    coverage_reasoning } }
 // Errors : { error: { code, message } }
 //
-// Reads the user's scan, derives the 5 lowest-scoring skin concerns, asks
-// Perfect Corp Skin Simulation to render an after-image of those concerns
-// improving, and caches the result on scans.simulation_image_url. Idempotent:
-// a second call returns the cached image without re-spending Perfect Corp
-// quota.
+// Reads the user's scan, derives the 5 lowest-scoring skin concerns, and —
+// when the scan has verdicts — asks Gemini which of them the "works"
+// products actually address, simulating only those (the rest are reported
+// as uncovered). Perfect Corp Skin Simulation renders the after-image,
+// cached on scans.simulation_image_url. Idempotent: a second call returns
+// the cached image without re-spending Perfect Corp quota.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 import { errorResponse, jsonResponse, preflight } from "../_shared/cors.ts";
+import { callGeminiJson } from "../_shared/gemini.ts";
 import { runPerfectCorpTask } from "../_shared/perfectcorp.ts";
-import { simulateSkinBody } from "../_shared/schemas.ts";
+import {
+  routineCoveragePrompt,
+  routineCoveragePromptStricter,
+} from "../_shared/prompts.ts";
+import { routineCoverage, simulateSkinBody } from "../_shared/schemas.ts";
 import { requireUser } from "../_shared/supabase.ts";
 
 // Map our normalized metric keys (from analyze-skin/extractMetrics) to the
@@ -75,11 +83,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
 
     if (scan.simulation_image_url) {
+      // Coverage details are not persisted; a cached hit returns just the
+      // image (chips render only right after a fresh generation).
       return jsonResponse({
         data: {
           simulation_image_url: scan.simulation_image_url,
-          concerns_simulated: [],
           cached: true,
+          routine_conditioned: false,
+          concerns_simulated: [],
+          concerns_uncovered: [],
+          coverage_reasoning: null,
         },
       });
     }
@@ -95,20 +108,93 @@ Deno.serve(async (req: Request): Promise<Response> => {
       )
       .sort(([, a], [, b]) => a - b)
       .slice(0, MAX_CONCERNS);
-    const simParams: Record<string, number> = {};
-    for (const [key, score] of lowMetrics) {
-      simParams[METRIC_TO_SIM_PARAM[key]] = improvementIntensity(score);
-    }
-    const concerns = lowMetrics.map(([key]) => key);
+    const lowConcerns = lowMetrics.map(([key]) => key);
 
-    if (concerns.length === 0) {
+    if (lowConcerns.length === 0) {
       return jsonResponse({
         data: {
           simulation_image_url: null,
-          concerns_simulated: [],
           cached: false,
+          routine_conditioned: false,
+          concerns_simulated: [],
+          concerns_uncovered: [],
+          coverage_reasoning: null,
         },
       });
+    }
+
+    // Routine conditioning: if this scan has verdicts, ask Gemini which of
+    // the low concerns the "works" products actually address, and simulate
+    // only those. Soft-fails back to simulating every low concern.
+    // Note: a cached simulation goes stale if verdicts are regenerated on
+    // the same scan — acceptable, a re-scan creates a fresh cache.
+    let routineConditioned = false;
+    let coveredConcerns = lowConcerns;
+    let coverageReasoning: string | null = null;
+    try {
+      const { data: worksVerdicts, error: verdictsErr } = await supabase
+        .from("verdicts")
+        .select("product_id")
+        .eq("scan_id", scanId)
+        .eq("verdict", "works");
+      if (verdictsErr) throw verdictsErr;
+      const worksIds = (worksVerdicts ?? []).map(
+        (v: { product_id: string }) => v.product_id,
+      );
+      if (worksIds.length > 0) {
+        const { data: worksProducts, error: productsErr } = await supabase
+          .from("products")
+          .select("id, name, brand, category, subcategory, ingredients")
+          .in("id", worksIds);
+        if (productsErr) throw productsErr;
+        if (worksProducts && worksProducts.length > 0) {
+          const coverage = await callGeminiJson({
+            prompt: routineCoveragePrompt(worksProducts, lowConcerns),
+            retryPrompt: routineCoveragePromptStricter(worksProducts, lowConcerns),
+            geminiSchema: {
+              type: "OBJECT",
+              properties: {
+                covered: { type: "ARRAY", items: { type: "STRING" } },
+                reasoning: { type: "STRING" },
+              },
+              required: ["covered", "reasoning"],
+            },
+            validator: routineCoverage,
+          });
+          routineConditioned = true;
+          coveredConcerns = lowConcerns.filter((c) =>
+            coverage.covered.includes(c),
+          );
+          coverageReasoning = coverage.reasoning;
+        }
+      }
+    } catch (err) {
+      console.warn("routine coverage failed (simulating all low concerns):", err);
+    }
+
+    const uncoveredConcerns = lowConcerns.filter(
+      (c) => !coveredConcerns.includes(c),
+    );
+
+    // Routine covers none of the low concerns: skip the Perfect Corp call
+    // entirely — there is nothing honest to render.
+    if (coveredConcerns.length === 0) {
+      return jsonResponse({
+        data: {
+          simulation_image_url: null,
+          cached: false,
+          routine_conditioned: routineConditioned,
+          concerns_simulated: [],
+          concerns_uncovered: uncoveredConcerns,
+          coverage_reasoning: coverageReasoning,
+        },
+      });
+    }
+
+    const simParams: Record<string, number> = {};
+    for (const [key, score] of lowMetrics) {
+      if (!coveredConcerns.includes(key)) continue;
+      simParams[METRIC_TO_SIM_PARAM[key]] = improvementIntensity(score);
     }
 
     const { data: selfie, error: dlErr } = await supabase.storage
@@ -154,8 +240,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return jsonResponse({
       data: {
         simulation_image_url: simPath,
-        concerns_simulated: concerns,
         cached: false,
+        routine_conditioned: routineConditioned,
+        concerns_simulated: coveredConcerns,
+        concerns_uncovered: uncoveredConcerns,
+        coverage_reasoning: coverageReasoning,
       },
     });
   } catch (err) {

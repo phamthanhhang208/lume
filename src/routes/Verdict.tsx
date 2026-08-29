@@ -5,7 +5,10 @@ import { useProducts } from "@/features/products/api/useProducts";
 import { useLatestScan } from "@/features/scans/api/useLatestScan";
 import { useSelfieSignedUrls } from "@/features/scans/api/useSelfieSignedUrls";
 import { useSimulateAgingMutation } from "@/features/scans/api/useSimulateAgingMutation";
-import { useSimulateSkinMutation } from "@/features/scans/api/useSimulateSkinMutation";
+import {
+  useSimulateSkinMutation,
+  type SimulateSkinResult,
+} from "@/features/scans/api/useSimulateSkinMutation";
 import { useLatestVerdicts } from "@/features/verdicts/api/useLatestVerdicts";
 
 export default function Verdict() {
@@ -151,8 +154,8 @@ export default function Verdict() {
         <BeforeAfterCard
           title="your skin in 4 weeks"
           idleTitle="preview your skin in 4 weeks"
-          description="Perfect Corp simulation of your low-scoring concerns improving with consistent routine. estimates, not guarantees."
-          idleDescription="we'll simulate how your skin could look after sticking with the works pile."
+          description="Perfect Corp simulation of the concerns your works pile actually targets. estimates, not guarantees."
+          idleDescription="we'll simulate the concerns your works pile actually targets — not a generic glow-up."
           afterCaption="4 weeks"
           buttonLabel="preview your skin in 4 weeks"
           selfiePath={scan.data.image_url}
@@ -161,6 +164,7 @@ export default function Verdict() {
           isPending={simulate.isPending}
           error={simulate.error?.message ?? null}
           onGenerate={() => simulate.mutate({ scanId: scan.data!.id })}
+          footer={<CoverageFooter result={simulate.data} />}
         />
       )}
 
@@ -216,6 +220,7 @@ interface BeforeAfterCardProps {
   isPending: boolean;
   error: string | null;
   onGenerate: () => void;
+  footer?: React.ReactNode;
 }
 
 function BeforeAfterCard({
@@ -231,6 +236,7 @@ function BeforeAfterCard({
   isPending,
   error,
   onGenerate,
+  footer,
 }: BeforeAfterCardProps) {
   const beforeUrl = urls[selfiePath];
   const afterUrl = afterPath ? urls[afterPath] : null;
@@ -291,10 +297,51 @@ function BeforeAfterCard({
           </button>
         )}
 
+        {footer}
+
         {error && (
           <p className="mt-2 font-sans text-xs text-rose-deep">{error}</p>
         )}
       </div>
+    </div>
+  );
+}
+
+// Coverage chips shown right after a fresh routine-conditioned simulation.
+// Not persisted — a page reload shows just the cached image.
+function CoverageFooter({
+  result,
+}: {
+  result: SimulateSkinResult | undefined;
+}) {
+  if (!result || result.cached) return null;
+  const { routineConditioned, concernsSimulated, concernsUncovered, coverageReasoning } = result;
+  if (!routineConditioned && concernsUncovered.length === 0) return null;
+
+  const noneCovered = routineConditioned && concernsSimulated.length === 0;
+
+  return (
+    <div className="mt-2 flex flex-col gap-1">
+      {concernsSimulated.length > 0 && (
+        <p className="font-mono text-[9.5px] uppercase tracking-[0.06em]" style={{ color: "#7CB89C" }}>
+          routine covers: {concernsSimulated.join(", ")}
+        </p>
+      )}
+      {concernsUncovered.length > 0 && (
+        <p className="font-mono text-[9.5px] uppercase tracking-[0.06em]" style={{ color: "#B08D3E" }}>
+          not covered yet: {concernsUncovered.join(", ")}
+        </p>
+      )}
+      {noneCovered && (
+        <p className="font-sans text-xs text-ink">
+          your current works pile doesn't target your lowest concerns yet —
+          nothing to simulate honestly. try adding products for the concerns
+          above.
+        </p>
+      )}
+      {coverageReasoning && (
+        <p className="font-sans text-xs text-ink-soft">{coverageReasoning}</p>
+      )}
     </div>
   );
 }

@@ -171,6 +171,40 @@ PRODUCTS:
 ${formatProducts(products)}`;
 }
 
+export function routineCoveragePrompt(
+  products: VerdictProductCtx[],
+  lowConcerns: string[],
+): string {
+  return `You are a skincare expert. The user's skin scan flagged these low-scoring concerns:
+
+LOW CONCERNS: ${lowConcerns.join(", ")}
+
+Their current routine (products rated "works" for them):
+${formatProducts(products)}
+
+Which of the LOW CONCERNS does this routine actually address, based on the ingredients?
+(e.g. niacinamide → redness/texture, retinol → wrinkle, salicylic acid → acne/pore, caffeine → dark_circle/eye_bag, vitamin C → age_spot/radiance)
+
+Return a JSON object:
+- covered: array of concern keys from LOW CONCERNS that at least one product credibly addresses
+- reasoning: 1-2 sentences naming which product covers what
+
+Rules:
+- covered MUST be a subset of LOW CONCERNS, using the exact keys given.
+- Only include a concern if an ingredient in some product is known to help it. Be conservative.`;
+}
+
+export function routineCoveragePromptStricter(
+  products: VerdictProductCtx[],
+  lowConcerns: string[],
+): string {
+  return `Return ONLY a JSON object: {"covered":string[],"reasoning":string}. No prose, no markdown.
+covered MUST be a subset of: ${lowConcerns.join(", ")} (exact keys, possibly empty).
+
+PRODUCTS:
+${formatProducts(products)}`;
+}
+
 interface LookProductCtx {
   id: string;
   name: string;

@@ -62,6 +62,12 @@ export const verdictItem = z.object({
 export type VerdictItem = z.infer<typeof verdictItem>;
 export const verdictList = z.array(verdictItem);
 
+export const routineCoverage = z.object({
+  covered: z.array(z.string()),
+  reasoning: z.string(),
+});
+export type RoutineCoverage = z.infer<typeof routineCoverage>;
+
 export const lookPick = z.object({
   product_id: z.string().uuid(),
   slot: z.string().min(1),

@@ -9,15 +9,22 @@ export interface SimulateSkinInput {
 
 export interface SimulateSkinResult {
   simulationImageUrl: string | null;
-  concernsSimulated: string[];
   cached: boolean;
+  /** True when the simulation was filtered by the scan's works-verdicts. */
+  routineConditioned: boolean;
+  concernsSimulated: string[];
+  concernsUncovered: string[];
+  coverageReasoning: string | null;
 }
 
 interface SimulateSkinResponse {
   data?: {
     simulation_image_url: string | null;
-    concerns_simulated: string[];
     cached: boolean;
+    routine_conditioned: boolean;
+    concerns_simulated: string[];
+    concerns_uncovered: string[];
+    coverage_reasoning: string | null;
   };
   error?: { code: string; message: string };
 }
@@ -40,8 +47,11 @@ export function useSimulateSkinMutation() {
       if (!result) throw new Error("no simulation result");
       return {
         simulationImageUrl: result.simulation_image_url,
-        concernsSimulated: result.concerns_simulated,
         cached: result.cached,
+        routineConditioned: result.routine_conditioned,
+        concernsSimulated: result.concerns_simulated,
+        concernsUncovered: result.concerns_uncovered,
+        coverageReasoning: result.coverage_reasoning,
       };
     },
     onSuccess: () => {
