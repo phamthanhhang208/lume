@@ -30,6 +30,12 @@ const DEFAULT_SLOT_COLORS: Record<string, string> = {
   eyebrow: "#4A3728",
 };
 
+/** Face attributes that influence pattern selection. */
+export interface MakeupFaceAttrs {
+  faceShape: string | null;
+  eyebrowShape: string | null;
+}
+
 // Contour/highlighter patterns are named after face shapes in the catalog.
 // Fall back to the oval variants, which suit most faces.
 function contourPattern(faceShape: string | null): string {
@@ -50,14 +56,24 @@ function highlighterPattern(faceShape: string | null): string {
   }
 }
 
+// Brow catalog labels are style-named (Arrow1, SoftArch1, ...). Match the
+// detected brow shape loosely; SoftArch flatters most faces as the default.
+function eyebrowPattern(browShape: string | null): string {
+  const shape = (browShape ?? "").toLowerCase();
+  if (shape.includes("arch")) return "SoftArch1";
+  if (shape.includes("arrow") || shape.includes("angled")) return "Arrow1";
+  return "SoftArch1";
+}
+
 /**
  * Builds the effects array for a makeup-vto task from slot/color picks.
  * Unknown slots are skipped.
  */
 export function buildMakeupEffects(
   picks: MakeupPick[],
-  faceShape: string | null,
+  faceAttrs: MakeupFaceAttrs | null,
 ): Array<Record<string, unknown>> {
+  const faceShape = faceAttrs?.faceShape ?? null;
   const effects: Array<Record<string, unknown>> = [];
   for (const pick of picks) {
     const color = pick.color ?? DEFAULT_SLOT_COLORS[pick.slot];
@@ -145,7 +161,10 @@ export function buildMakeupEffects(
       case "eyebrow":
         effects.push({
           category: "eyebrows",
-          pattern: { type: "shape", name: "SoftArch1" },
+          pattern: {
+            type: "shape",
+            name: eyebrowPattern(faceAttrs?.eyebrowShape ?? null),
+          },
           palettes: [{ color, colorIntensity: 60 }],
         });
         break;

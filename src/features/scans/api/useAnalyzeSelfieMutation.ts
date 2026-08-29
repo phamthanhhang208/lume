@@ -13,6 +13,7 @@ export type AnalyzeSelfieInput =
       blob: Blob;
       needsToneAnalysis: boolean;
       needsFaceAnalysis: boolean;
+      needsSkinTypeAnalysis: boolean;
     }
   | {
       source: "saved";
@@ -20,6 +21,7 @@ export type AnalyzeSelfieInput =
       storagePath: string;
       needsToneAnalysis: boolean;
       needsFaceAnalysis: boolean;
+      needsSkinTypeAnalysis: boolean;
     };
 
 interface AnalyzeSkinResponse {
@@ -43,6 +45,14 @@ interface AnalyzeSkinToneResponse {
 interface AnalyzeFaceResponse {
   data?: {
     face: unknown;
+    raw_response: unknown;
+  };
+  error?: { code: string; message: string };
+}
+
+interface AnalyzeSkinTypeResponse {
+  data?: {
+    skin_type: unknown;
     raw_response: unknown;
   };
   error?: { code: string; message: string };
@@ -131,6 +141,30 @@ export function useAnalyzeSelfieMutation() {
           }
         } catch (err) {
           console.warn("face analysis failed (non-blocking):", err);
+        }
+      }
+
+      if (input.needsSkinTypeAnalysis) {
+        try {
+          const skinType = await supabase.functions.invoke<AnalyzeSkinTypeResponse>(
+            "analyze-skin-type",
+            { body: { storage_path: storagePath } },
+          );
+          if (skinType.error) throw skinType.error;
+          if (skinType.data?.error) {
+            throw new Error(
+              `${skinType.data.error.code}: ${skinType.data.error.message}`,
+            );
+          }
+          if (skinType.data?.data) {
+            const { error: profileError } = await supabase
+              .from("profiles")
+              .update({ skin_type_data: skinType.data.data.skin_type })
+              .eq("id", input.userId);
+            if (profileError) throw profileError;
+          }
+        } catch (err) {
+          console.warn("skin-type analysis failed (non-blocking):", err);
         }
       }
 

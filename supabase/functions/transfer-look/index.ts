@@ -23,7 +23,12 @@ import { errorResponse, jsonResponse, preflight } from "../_shared/cors.ts";
 import { callGeminiJson } from "../_shared/gemini.ts";
 import { VALID_MAKEUP_SLOTS } from "../_shared/makeup.ts";
 import { runPerfectCorpTask } from "../_shared/perfectcorp.ts";
-import { stealLookPrompt, stealLookPromptStricter } from "../_shared/prompts.ts";
+import {
+  faceAttrsFrom,
+  skinToneFrom,
+  stealLookPrompt,
+  stealLookPromptStricter,
+} from "../_shared/prompts.ts";
 import { lookOrchestration, transferLookBody } from "../_shared/schemas.ts";
 import { requireUser } from "../_shared/supabase.ts";
 
@@ -71,7 +76,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // 2. Saved selfie
     const { data: profile, error: profileErr } = await supabase
       .from("profiles")
-      .select("saved_selfie_url")
+      .select("saved_selfie_url, skin_tone_data, face_data")
       .maybeSingle();
     if (profileErr) throw profileErr;
     if (!profile?.saved_selfie_url) {
@@ -100,10 +105,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
       reasoning: string;
       gaps: string[];
     };
+    const faceAttrs = faceAttrsFrom(profile.face_data);
+    const skinTone = skinToneFrom(profile.skin_tone_data);
     try {
       const orchestration = await callGeminiJson({
-        prompt: stealLookPrompt(products ?? [], VALID_MAKEUP_SLOTS),
-        retryPrompt: stealLookPromptStricter(products ?? [], VALID_MAKEUP_SLOTS),
+        prompt: stealLookPrompt(products ?? [], VALID_MAKEUP_SLOTS, faceAttrs, skinTone),
+        retryPrompt: stealLookPromptStricter(
+          products ?? [],
+          VALID_MAKEUP_SLOTS,
+          faceAttrs,
+          skinTone,
+        ),
         image: { mimeType: refMime, bytes: refBytes },
         geminiSchema: {
           type: "OBJECT",

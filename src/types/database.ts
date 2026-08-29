@@ -7,6 +7,7 @@ export interface Profile {
   saved_selfie_url: string | null;
   skin_tone_data: unknown;
   face_data: unknown;
+  skin_type_data: unknown;
   created_at: string;
   updated_at: string;
 }

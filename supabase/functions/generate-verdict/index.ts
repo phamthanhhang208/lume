@@ -70,9 +70,23 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const ownedIds = new Set(products.map((product) => product.id));
     const metrics = (scan.metrics ?? {}) as Record<string, number>;
 
+    const { data: profile, error: profileSelErr } = await supabase
+      .from("profiles")
+      .select("skin_type_data")
+      .maybeSingle();
+    if (profileSelErr) throw profileSelErr;
+    const typeData = profile?.skin_type_data as
+      | { fitzpatrick_type?: unknown }
+      | null
+      | undefined;
+    const skinType =
+      typeData && typeof typeData.fitzpatrick_type === "string"
+        ? typeData.fitzpatrick_type
+        : null;
+
     const raw = await callGeminiJson({
-      prompt: verdictPrompt(metrics, products),
-      retryPrompt: verdictPromptStricter(metrics, products),
+      prompt: verdictPrompt(metrics, products, skinType),
+      retryPrompt: verdictPromptStricter(metrics, products, skinType),
       geminiSchema: {
         type: "ARRAY",
         items: {

@@ -30,7 +30,12 @@ import {
   VALID_MAKEUP_SLOTS,
 } from "../_shared/makeup.ts";
 import { runPerfectCorpTask } from "../_shared/perfectcorp.ts";
-import { lookPrompt, lookPromptStricter } from "../_shared/prompts.ts";
+import {
+  faceAttrsFrom,
+  lookPrompt,
+  lookPromptStricter,
+  skinToneFrom,
+} from "../_shared/prompts.ts";
 import { lookOrchestration } from "../_shared/schemas.ts";
 import { requireUser } from "../_shared/supabase.ts";
 
@@ -78,15 +83,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     const ownedIds = new Set(products.map((product: { id: string }) => product.id));
 
-    const faceData = profile.face_data as { face_shape?: unknown } | null;
-    const faceShape =
-      faceData && typeof faceData.face_shape === "string"
-        ? faceData.face_shape
-        : null;
+    const faceAttrs = faceAttrsFrom(profile.face_data);
+    const skinTone = skinToneFrom(profile.skin_tone_data);
 
     const orchestration = await callGeminiJson({
-      prompt: lookPrompt(userPrompt, products, VALID_SLOTS, faceShape),
-      retryPrompt: lookPromptStricter(userPrompt, products, VALID_SLOTS, faceShape),
+      prompt: lookPrompt(userPrompt, products, VALID_SLOTS, faceAttrs, skinTone),
+      retryPrompt: lookPromptStricter(userPrompt, products, VALID_SLOTS, faceAttrs, skinTone),
       geminiSchema: {
         type: "OBJECT",
         properties: {
@@ -138,7 +140,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
         // no task units).
         const effects = buildMakeupEffects(
           picks.map((pick) => ({ slot: pick.slot, color: pick.color ?? null })),
-          faceShape,
+          {
+            faceShape: faceAttrs?.face_shape ?? null,
+            eyebrowShape: faceAttrs?.eyebrow_shape ?? null,
+          },
         );
         let resultUrl: string;
         try {

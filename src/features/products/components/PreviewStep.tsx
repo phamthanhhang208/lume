@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import type { FormEvent } from "react";
 
 import IngredientList from "@/features/products/components/IngredientList";
+import { useCheckShadeMutation } from "@/features/products/api/useCheckShadeMutation";
 import { useCreateProductMutation } from "@/features/products/api/useCreateProductMutation";
 import { useSearchIngredientsMutation } from "@/features/products/api/useSearchIngredientsMutation";
 import { subcategoriesFor } from "@/features/products/utils/subcategories";
@@ -27,6 +28,7 @@ export default function PreviewStep({ userId, onSaved }: PreviewStepProps) {
     shade,
     frontProcessingStatus,
     backProcessingStatus,
+    frontProcessingGeneration,
     backProcessingGeneration,
     setName,
     setBrand,
@@ -37,7 +39,9 @@ export default function PreviewStep({ userId, onSaved }: PreviewStepProps) {
   } = useDraftProductStore();
   const createProduct = useCreateProductMutation();
   const searchIngredients = useSearchIngredientsMutation();
+  const checkShade = useCheckShadeMutation();
   const lastSearchedGenerationRef = useRef<number>(-1);
+  const shadeCheckedRef = useRef<string>("");
 
   const trimmedName = name.trim();
   const trimmedBrand = brand.trim();
@@ -64,6 +68,25 @@ export default function PreviewStep({ userId, onSaved }: PreviewStepProps) {
       },
     );
   };
+
+  // Shade sanity check: once per front attempt, when the extracted product
+  // is a complexion product with a shade, ask check-shade whether it suits
+  // the user's stored skin tone. Purely informational — never blocks save.
+  useEffect(() => {
+    if (frontProcessingStatus !== "done") return;
+    if (subcategory !== "foundation" && subcategory !== "concealer") return;
+    const trimmedShade = shade.trim();
+    if (!trimmedShade || !trimmedName) return;
+    const key = String(frontProcessingGeneration);
+    if (shadeCheckedRef.current === key) return;
+    shadeCheckedRef.current = key;
+    checkShade.mutate({
+      name: trimmedName,
+      brand: trimmedBrand || null,
+      shade: trimmedShade,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [frontProcessingStatus, subcategory, shade, trimmedName, frontProcessingGeneration]);
 
   // Auto-trigger search once per back attempt when OCR (or skip) leaves us
   // with no ingredients but we do have a product name to query with.
@@ -193,6 +216,16 @@ export default function PreviewStep({ userId, onSaved }: PreviewStepProps) {
             {frontPending && <span aria-busy="true"> reading...</span>}
           </label>
         </p>
+        {checkShade.data && checkShade.data.verdict !== "unknown" && (
+          <p>
+            <small>
+              {checkShade.data.verdict === "match"
+                ? "✓ shade looks right for your tone"
+                : `⚠ this shade may run ${checkShade.data.verdict.replace("too_", "")} for your skin tone`}
+              {checkShade.data.note && <> — {checkShade.data.note}</>}
+            </small>
+          </p>
+        )}
         {backPending ? (
           <p aria-busy="true">reading ingredients...</p>
         ) : (

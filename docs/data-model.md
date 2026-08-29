@@ -14,7 +14,8 @@ Extends `auth.users` with app-specific data.
 | display_name     | text        | Nullable                                                                                                            |
 | saved_selfie_url | text        | Nullable. URL into Supabase Storage. Used for VTO and as reusable Skin Analysis input                               |
 | skin_tone_data   | jsonb       | Nullable. Result of Perfect Corp Skin Tone Analysis (skin tone class, eye color, lip color, brow color, hair color) |
-| face_data        | jsonb       | Nullable. Result of Perfect Corp AI Face Analyzer (face shape, landmarks summary)                                   |
+| face_data        | jsonb       | Nullable. Result of Perfect Corp Face Attributes analysis (face shape, eye shape, eyelid, brow shape, lip shape)    |
+| skin_type_data   | jsonb       | Nullable. Result of Perfect Corp Fitzpatrick Skin Type Analysis (`{fitzpatrick_type: "I".."VI"}`)                   |
 | created_at       | timestamptz | default now()                                                                                                       |
 | updated_at       | timestamptz | default now()                                                                                                       |
 

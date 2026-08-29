@@ -62,6 +62,26 @@ export const verdictItem = z.object({
 export type VerdictItem = z.infer<typeof verdictItem>;
 export const verdictList = z.array(verdictItem);
 
+export const checkShadeBody = z.object({
+  name: z.string().min(1).max(200),
+  brand: z.string().max(120).nullable(),
+  shade: z.string().min(1).max(120),
+});
+export type CheckShadeBody = z.infer<typeof checkShadeBody>;
+
+export const shadeCheck = z.object({
+  verdict: z.enum([
+    "match",
+    "too_warm",
+    "too_cool",
+    "too_light",
+    "too_deep",
+    "unknown",
+  ]),
+  note: z.string().nullable().optional().default(null),
+});
+export type ShadeCheck = z.infer<typeof shadeCheck>;
+
 export const routineCoverage = z.object({
   covered: z.array(z.string()),
   reasoning: z.string(),
