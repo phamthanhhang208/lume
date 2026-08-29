@@ -97,6 +97,33 @@ Unique constraint on `(scan_id, product_id)` — one verdict per product per sca
 
 Indexes: `(user_id, product_id)` for product detail view, `(scan_id)` for verdict grid view.
 
+### routines
+
+A named, user-curated subset of products ("what I actually use"). At most
+one routine per user is active (partial unique index); `generate-verdict`
+grades the active routine's products and falls back to the whole shelf when
+no non-empty active routine exists.
+
+| Column     | Type        | Notes                              |
+| ---------- | ----------- | ---------------------------------- |
+| id         | uuid (PK)   | default gen_random_uuid()          |
+| user_id    | uuid (FK)   | References `auth.users.id`         |
+| name       | text        | e.g. "everyday", "barrier repair"  |
+| is_active  | boolean     | default false; max one per user    |
+| created_at | timestamptz | default now()                      |
+
+### routine_products
+
+Join table; ownership enforced through the parent routine's RLS.
+
+| Column     | Type        | Notes                                  |
+| ---------- | ----------- | -------------------------------------- |
+| routine_id | uuid (FK)   | References `routines.id`, cascade      |
+| product_id | uuid (FK)   | References `products.id`, cascade      |
+| added_at   | timestamptz | default now()                          |
+
+Primary key: `(routine_id, product_id)`.
+
 ### looks
 
 A generated makeup look.

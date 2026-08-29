@@ -2,6 +2,7 @@ import { Link } from "react-router";
 
 import VerdictTag from "@/components/ui/VerdictTag";
 import { useProducts } from "@/features/products/api/useProducts";
+import { useRoutines } from "@/features/routines/api/useRoutines";
 import { useLatestScan } from "@/features/scans/api/useLatestScan";
 import { useSelfieSignedUrls } from "@/features/scans/api/useSelfieSignedUrls";
 import { useSimulateAgingMutation } from "@/features/scans/api/useSimulateAgingMutation";
@@ -15,6 +16,10 @@ export default function Verdict() {
   const scan = useLatestScan();
   const verdicts = useLatestVerdicts();
   const products = useProducts();
+  const routines = useRoutines();
+  const activeRoutine = routines.data?.find(
+    (routine) => routine.is_active && routine.product_ids.length > 0,
+  );
   const simulate = useSimulateSkinMutation();
   const simulateAging = useSimulateAgingMutation();
   const selfieUrls = useSelfieSignedUrls([
@@ -54,6 +59,12 @@ export default function Verdict() {
             scan from {new Date(scan.data.created_at).toLocaleDateString()}
           </p>
         )}
+        <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.08em] text-ink-soft">
+          grading: {activeRoutine ? activeRoutine.name : "everything you own"} ·{" "}
+          <Link to="/routines" className="underline">
+            manage routines
+          </Link>
+        </p>
       </div>
 
       {/* Summary row */}

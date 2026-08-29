@@ -5,6 +5,7 @@ import LumeMark from "@/components/ui/LumeMark";
 const NAV = [
   { label: "Today", to: "/dashboard" },
   { label: "Skin", to: "/scan" },
+  { label: "Routines", to: "/routines" },
   { label: "Verdict", to: "/verdict" },
   { label: "Looks", to: "/look" },
 ];

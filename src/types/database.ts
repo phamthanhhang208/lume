@@ -65,6 +65,18 @@ export interface Verdict {
   created_at: string;
 }
 
+export interface Routine {
+  id: string;
+  user_id: string;
+  name: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface RoutineWithProducts extends Routine {
+  product_ids: string[];
+}
+
 export interface Look {
   id: string;
   user_id: string;

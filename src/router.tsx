@@ -6,6 +6,7 @@ import AuthCallback from "@/routes/AuthCallback";
 import Dashboard from "@/routes/Dashboard";
 import AddProduct from "@/routes/AddProduct";
 import ProductDetail from "@/routes/ProductDetail";
+import Routines from "@/routes/Routines";
 import Scan from "@/routes/Scan";
 import Verdict from "@/routes/Verdict";
 import Look from "@/routes/Look";
@@ -27,6 +28,7 @@ export const router = createBrowserRouter([
           { path: "/products/:id", element: <ProductDetail /> },
           { path: "/scan", element: <Scan /> },
           { path: "/verdict", element: <Verdict /> },
+          { path: "/routines", element: <Routines /> },
           { path: "/look", element: <Look /> },
           { path: "/profile", element: <Profile /> },
         ],
