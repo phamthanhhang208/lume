@@ -58,19 +58,19 @@ case "$NAME" in
     MODULES=(cors.ts supabase.ts gemini.ts prompts.ts schemas.ts)
     ;;
   generate-look)
-    MODULES=(cors.ts supabase.ts gemini.ts makeup.ts perfectcorp.ts prompts.ts schemas.ts)
+    MODULES=(cors.ts supabase.ts image.ts gemini.ts makeup.ts perfectcorp.ts prompts.ts schemas.ts)
     ;;
   transfer-look)
-    MODULES=(cors.ts supabase.ts gemini.ts makeup.ts perfectcorp.ts prompts.ts schemas.ts)
+    MODULES=(cors.ts supabase.ts image.ts gemini.ts makeup.ts perfectcorp.ts prompts.ts schemas.ts)
     ;;
   simulate-skin)
-    MODULES=(cors.ts supabase.ts gemini.ts perfectcorp.ts schemas.ts)
+    MODULES=(cors.ts supabase.ts image.ts gemini.ts perfectcorp.ts schemas.ts)
     ;;
   simulate-aging)
     MODULES=(cors.ts supabase.ts perfectcorp.ts schemas.ts)
     ;;
   try-from-web)
-    MODULES=(cors.ts supabase.ts gemini.ts makeup.ts perfectcorp.ts)
+    MODULES=(cors.ts supabase.ts image.ts gemini.ts makeup.ts perfectcorp.ts)
     ;;
   *)
     echo "error: unknown function '$NAME' — add its modules to this script" >&2

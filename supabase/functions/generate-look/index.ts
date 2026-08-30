@@ -23,6 +23,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { z } from "npm:zod@4";
 
 import { errorResponse, jsonResponse, preflight } from "../_shared/cors.ts";
+import { normalizeForPC } from "../_shared/image.ts";
 import { callGeminiJson } from "../_shared/gemini.ts";
 import {
   buildMakeupEffects,
@@ -127,20 +128,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     if (picks.length > 0) {
       try {
-        // Use Supabase Image Transform to resize to ≤ 1920×1920 on download
-        // (PC makeup-vto rejects images larger than 1920×1920px).
-        const { data: urlData, error: urlErr } = await supabase.storage
+        // Downscale in-function — PC makeup-vto rejects images larger than
+        // 1920×1920px, and Supabase Image Transform is Pro-only.
+        const { data: selfieBlob, error: selfieErr } = await supabase.storage
           .from("selfies")
-          .createSignedUrl(profile.saved_selfie_url, 120, {
-            transform: { width: 1920, height: 1920, resize: "contain" },
-          });
-        if (urlErr || !urlData?.signedUrl) {
-          throw urlErr ?? new Error("failed to create signed url for selfie");
+          .download(profile.saved_selfie_url);
+        if (selfieErr || !selfieBlob) {
+          throw selfieErr ?? new Error("no selfie blob");
         }
-        const selfieRes = await fetch(urlData.signedUrl);
-        if (!selfieRes.ok) throw new Error(`selfie download ${selfieRes.status}`);
-        const bytes = new Uint8Array(await selfieRes.arrayBuffer());
-        const contentType = "image/jpeg";
+        const { bytes, contentType } = await normalizeForPC(
+          new Uint8Array(await selfieBlob.arrayBuffer()),
+          1920,
+        );
         const fileName = "selfie.jpg";
 
         // Primary: makeup-vto with the color-aware effects dialect.

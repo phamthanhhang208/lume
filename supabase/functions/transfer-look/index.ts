@@ -20,6 +20,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 import { errorResponse, jsonResponse, preflight } from "../_shared/cors.ts";
+import { normalizeForPC } from "../_shared/image.ts";
 import { callGeminiJson } from "../_shared/gemini.ts";
 import { VALID_MAKEUP_SLOTS } from "../_shared/makeup.ts";
 import { runPerfectCorpTask } from "../_shared/perfectcorp.ts";
@@ -88,9 +89,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (dlErr || !selfie) {
       return errorResponse("download_failed", dlErr?.message ?? "no selfie blob", 500);
     }
-    const selfieBytes = new Uint8Array(await selfie.arrayBuffer());
-    const selfieMime = selfie.type || "image/jpeg";
-    const selfieName = profile.saved_selfie_url.split("/").pop() ?? "selfie.jpg";
+    const rawSelfie = new Uint8Array(await selfie.arrayBuffer());
+    const { bytes: selfieBytes, contentType: selfieMime } =
+      await normalizeForPC(rawSelfie, 1920);
+    const selfieName = "selfie.jpg";
 
     // 5 (early). Product mapping runs regardless of transfer outcome.
     const { data: products, error: productsErr } = await supabase

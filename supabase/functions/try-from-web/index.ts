@@ -19,6 +19,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { z } from "npm:zod@4";
 
 import { errorResponse, jsonResponse, preflight } from "../_shared/cors.ts";
+import { normalizeForPC } from "../_shared/image.ts";
 import { callGeminiJson } from "../_shared/gemini.ts";
 import {
   buildMakeupEffects,
@@ -156,9 +157,10 @@ Image is a product photo${page_title ? ` from page "${page_title}"` : ""}.`;
     if (dlErr || !selfie) {
       return errorResponse("download_failed", dlErr?.message ?? "no blob", 500);
     }
-    const selfieBytes = new Uint8Array(await selfie.arrayBuffer());
-    const selfieMime = selfie.type || "image/jpeg";
-    const selfieName = profile.saved_selfie_url.split("/").pop() ?? "selfie.jpg";
+    const rawSelfie = new Uint8Array(await selfie.arrayBuffer());
+    const { bytes: selfieBytes, contentType: selfieMime } =
+      await normalizeForPC(rawSelfie, 1920);
+    const selfieName = "selfie.jpg";
 
     let resultUrl: string | null = null;
 
