@@ -218,7 +218,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     const { data: scan, error: scanErr } = await supabase
       .from("scans")
-      .select("id, user_id, image_url, metrics, simulation_image_url")
+      .select("id, user_id, image_url, metrics, simulation_image_url, simulation_meta")
       .eq("id", scanId)
       .maybeSingle();
     if (scanErr) throw scanErr;
@@ -228,17 +228,25 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
 
     // Bypass cache when product selection is provided — each selection should
-    // produce a fresh simulation reflecting those products' effects. Coverage
-    // details are not persisted; a cached hit returns just the image.
+    // produce a fresh simulation reflecting those products' effects. A cached
+    // hit returns the persisted coverage meta alongside the image.
     if (!hasSelection && scan.simulation_image_url) {
+      const meta = (scan.simulation_meta ?? {}) as Record<string, unknown>;
       return jsonResponse({
         data: {
           simulation_image_url: scan.simulation_image_url,
           cached: true,
-          routine_conditioned: false,
-          concerns_simulated: [],
-          concerns_uncovered: [],
-          coverage_reasoning: null,
+          routine_conditioned: meta.routine_conditioned === true,
+          concerns_simulated: Array.isArray(meta.concerns_simulated)
+            ? meta.concerns_simulated
+            : [],
+          concerns_uncovered: Array.isArray(meta.concerns_uncovered)
+            ? meta.concerns_uncovered
+            : [],
+          coverage_reasoning:
+            typeof meta.coverage_reasoning === "string"
+              ? meta.coverage_reasoning
+              : null,
         },
       });
     }
@@ -408,9 +416,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
       });
     if (upErr) throw upErr;
 
+    const simulationMeta = {
+      routine_conditioned: routineConditioned,
+      concerns_simulated: concernsSimulated,
+      concerns_uncovered: concernsUncovered,
+      coverage_reasoning: coverageReasoning,
+    };
     const { error: updErr } = await supabase
       .from("scans")
-      .update({ simulation_image_url: simPath })
+      .update({ simulation_image_url: simPath, simulation_meta: simulationMeta })
       .eq("id", scanId);
     if (updErr) throw updErr;
 
@@ -418,10 +432,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       data: {
         simulation_image_url: simPath,
         cached: false,
-        routine_conditioned: routineConditioned,
-        concerns_simulated: concernsSimulated,
-        concerns_uncovered: concernsUncovered,
-        coverage_reasoning: coverageReasoning,
+        ...simulationMeta,
       },
     });
   } catch (err) {

@@ -7,10 +7,7 @@ import { useRoutines } from "@/features/routines/api/useRoutines";
 import { useLatestScan } from "@/features/scans/api/useLatestScan";
 import { useSelfieSignedUrls } from "@/features/scans/api/useSelfieSignedUrls";
 import { useSimulateAgingMutation } from "@/features/scans/api/useSimulateAgingMutation";
-import {
-  useSimulateSkinMutation,
-  type SimulateSkinResult,
-} from "@/features/scans/api/useSimulateSkinMutation";
+import { useSimulateSkinMutation } from "@/features/scans/api/useSimulateSkinMutation";
 import { useLatestVerdicts } from "@/features/verdicts/api/useLatestVerdicts";
 import type { Product } from "@/types/database";
 
@@ -24,6 +21,34 @@ export default function Verdict() {
   );
   const simulate = useSimulateSkinMutation();
   const simulateAging = useSimulateAgingMutation();
+  // Coverage chips survive reloads: prefer the fresh mutation result, fall
+  // back to the meta persisted on the scan row with the cached image.
+  const storedMeta = scan.data?.simulation_meta as
+    | {
+        routine_conditioned?: unknown;
+        concerns_simulated?: unknown;
+        concerns_uncovered?: unknown;
+        coverage_reasoning?: unknown;
+      }
+    | null
+    | undefined;
+  const coverage: CoverageInfo | undefined = simulate.data
+    ? simulate.data
+    : storedMeta && scan.data?.simulation_image_url
+      ? {
+          routineConditioned: storedMeta.routine_conditioned === true,
+          concernsSimulated: Array.isArray(storedMeta.concerns_simulated)
+            ? (storedMeta.concerns_simulated as string[])
+            : [],
+          concernsUncovered: Array.isArray(storedMeta.concerns_uncovered)
+            ? (storedMeta.concerns_uncovered as string[])
+            : [],
+          coverageReasoning:
+            typeof storedMeta.coverage_reasoning === "string"
+              ? storedMeta.coverage_reasoning
+              : null,
+        }
+      : undefined;
   const selfieUrls = useSelfieSignedUrls([
     scan.data?.image_url,
     scan.data?.simulation_image_url,
@@ -176,7 +201,7 @@ export default function Verdict() {
           onSimulate={(productIds) =>
             simulate.mutate({ scanId: scan.data!.id, productIds })
           }
-          footer={<CoverageFooter result={simulate.data} />}
+          footer={<CoverageFooter info={coverage} />}
         />
       )}
 
@@ -460,15 +485,18 @@ function BeforeAfterCard({
   );
 }
 
-// Coverage chips shown right after a fresh simulation (selection- or
-// routine-driven). Not persisted — a reload shows just the cached image.
-function CoverageFooter({
-  result,
-}: {
-  result: SimulateSkinResult | undefined;
-}) {
-  if (!result || result.cached) return null;
-  const { routineConditioned, concernsSimulated, concernsUncovered, coverageReasoning } = result;
+interface CoverageInfo {
+  routineConditioned: boolean;
+  concernsSimulated: string[];
+  concernsUncovered: string[];
+  coverageReasoning: string | null;
+}
+
+// Coverage chips for the simulation card. Persisted with the render on
+// scans.simulation_meta, so they survive page reloads.
+function CoverageFooter({ info }: { info: CoverageInfo | undefined }) {
+  if (!info) return null;
+  const { routineConditioned, concernsSimulated, concernsUncovered, coverageReasoning } = info;
   if (
     concernsSimulated.length === 0 &&
     concernsUncovered.length === 0 &&

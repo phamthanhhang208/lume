@@ -117,8 +117,11 @@ function StealResultView({ imageUrl, result }: StealResultViewProps) {
             From your shelf:
           </p>
           <ul>
-            {look.products_used.map(({ product_id, slot }) => (
-              <li key={`${product_id}-${slot}`}>{slot}</li>
+            {look.products_used.map(({ product_id, slot, name, brand }) => (
+              <li key={`${product_id}-${slot}`}>
+                <strong>{slot}</strong>
+                {name ? ` — ${brand ? `${brand} ` : ""}${name}` : ""}
+              </li>
             ))}
           </ul>
         </>

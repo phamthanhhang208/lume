@@ -203,11 +203,27 @@ Deno.serve(async (req: Request): Promise<Response> => {
       }
     }
 
-    // 6. Insert looks row
+    // 6. Insert looks row. The DB keeps the canonical {product_id, slot}
+    // shape; the response enriches each entry with name/brand so clients
+    // without a products query (the extension) can show real product names.
+    const productsById = new Map(
+      (products ?? []).map((p: { id: string; name: string; brand: string | null }) => [
+        p.id,
+        p,
+      ]),
+    );
     const productsUsed = mapping.products.map((pick) => ({
       product_id: pick.product_id,
       slot: pick.slot,
     }));
+    const productsUsedDetailed = productsUsed.map((pu) => {
+      const product = productsById.get(pu.product_id);
+      return {
+        ...pu,
+        name: product?.name ?? null,
+        brand: product?.brand ?? null,
+      };
+    });
     const { data: look, error: insertErr } = await supabase
       .from("looks")
       .insert({
@@ -240,7 +256,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
       signed[key] = signedData?.signedUrl ?? null;
     }
 
-    return jsonResponse({ data: { look: { ...look, gaps: mapping.gaps }, signed } });
+    return jsonResponse({
+      data: {
+        look: {
+          ...look,
+          products_used: productsUsedDetailed,
+          gaps: mapping.gaps,
+        },
+        signed,
+      },
+    });
   } catch (err) {
     console.error("transfer-look error:", err);
     const message = err instanceof Error ? err.message : String(err);

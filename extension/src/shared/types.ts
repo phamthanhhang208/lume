@@ -25,7 +25,12 @@ export interface TransferLookResult {
     prompt: string;
     result_image_url: string | null;
     reference_image_url: string | null;
-    products_used: Array<{ product_id: string; slot: string }>;
+    products_used: Array<{
+      product_id: string;
+      slot: string;
+      name?: string | null;
+      brand?: string | null;
+    }>;
     gemini_reasoning: string | null;
     gaps: string[];
   };

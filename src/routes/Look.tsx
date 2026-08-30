@@ -309,7 +309,8 @@ export default function Look() {
               </button>
             </div>
 
-            {/* History below the result */}
+            {/* History below the result — the fresh look is already the big
+                card above, so keep it out of the list (Novus UX review). */}
             <div className="mt-8">
               <h2 className="mb-0.5 font-hand text-xl font-semibold text-ink">previous looks</h2>
               <svg width="80" height="8" viewBox="0 0 80 8" style={{ display: "block", marginBottom: 10 }}>
@@ -317,7 +318,7 @@ export default function Look() {
               </svg>
               {looks.data && looks.data.length > 0 && (
                 <div className="flex flex-col gap-3">
-                  {looks.data.map((look) => (
+                  {looks.data.filter((look) => look.id !== latest.id).map((look) => (
                     <LookHistoryRow
                       key={look.id}
                       look={look}
