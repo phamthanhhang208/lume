@@ -2,18 +2,23 @@
 
 ## System overview
 
-Lume is a client-heavy PWA. The React app talks directly to Supabase for auth, data persistence, and image storage. For third-party AI APIs (Perfect Corp, Gemini), the app calls Supabase Edge Functions which act as a thin proxy to keep API keys server-side.
+Lume is a client-heavy PWA. The React app talks directly to Supabase for auth, data persistence, and image storage. For third-party AI APIs (Perfect Corp, Gemini, Open Beauty Facts), the app calls Supabase Edge Functions which act as a thin proxy to keep API keys server-side. The Chrome extension is a second client hitting the same edge functions with a pasted access token.
 
 ```
-[React PWA]
+[React PWA]        [Chrome extension (MV3 side panel)]
+    |                     |
+    +---------------------+
     |
-    +---> Supabase Auth (magic link)
-    +---> Supabase Postgres (data)
+    +---> Supabase Auth (magic link + demo password login)
+    +---> Supabase Postgres (data, RLS)
     +---> Supabase Storage (images)
-    +---> Supabase Edge Functions
+    +---> Supabase Edge Functions (15)
               |
-              +---> Perfect Corp YouCam API
+              +---> Perfect Corp YouCam API (s2s v2 task pipeline, 10 features)
               +---> Google Gemini 2.5 Flash API
+              +---> Open Beauty Facts (ingredient lookup)
+
+[Novus.ai] — product analytics, auto-instrumented from the repo
 ```
 
 ## Why this shape
@@ -43,7 +48,7 @@ Lume is a client-heavy PWA. The React app talks directly to Supabase for auth, d
 - No CSS-in-JS. Tailwind handles styling.
 - No form library yet. Forms are simple enough for controlled components. Revisit if forms grow complex.
 - No UI component library (no shadcn, MUI, Chakra). Custom components only. The visual design is bespoke.
-- No analytics. Hackathon scope, not needed.
+- No hand-rolled analytics. Novus.ai auto-instruments from the codebase (hackathon requirement turned feature).
 - No SSR. Pure SPA / PWA.
 
 ## Folder structure
@@ -60,17 +65,21 @@ lume/
 │   └── phases.md
 ├── public/
 │   └── (PWA assets later)
+├── extension/                # Chrome extension workspace package (MV3)
 ├── supabase/
 │   ├── migrations/           # SQL migration files
-│   └── functions/            # Edge Functions (one folder per function)
+│   └── functions/            # Edge Functions (one folder per function; _shared/ for clients + prompts)
 ├── src/
 │   ├── routes/               # Route components, one per route
 │   ├── components/           # Reusable UI components
 │   │   └── ui/               # Primitive components (Button, Input, etc.)
-│   ├── features/             # Feature-scoped logic (auth, products, scans, looks)
+│   ├── features/             # Feature-scoped logic
 │   │   ├── auth/
 │   │   ├── products/
+│   │   ├── routines/
 │   │   ├── scans/
+│   │   ├── verdicts/
+│   │   ├── profile/
 │   │   └── looks/
 │   ├── lib/                  # Cross-cutting utilities
 │   │   ├── supabase.ts       # Supabase client
@@ -121,6 +130,11 @@ All client-side env vars are prefixed `VITE_`:
 ```
 VITE_SUPABASE_URL
 VITE_SUPABASE_ANON_KEY
+VITE_APP_URL            # magic-link redirect base
+VITE_DEMO_EMAIL         # optional — demo login button creds
+VITE_DEMO_PASSWORD      # optional — throwaway, ships to the browser
 ```
+
+The extension reuses `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` in its own `.env`.
 
 Server-side secrets (Perfect Corp key, Gemini key) live in Supabase Edge Function secrets, never in the client.

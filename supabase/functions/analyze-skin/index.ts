@@ -154,9 +154,31 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return errorResponse("download_failed", dlErr?.message ?? "no blob", 500);
     }
 
-    const bytes = new Uint8Array(await blob.arrayBuffer());
-    const contentType = blob.type || "image/jpeg";
+    let bytes = new Uint8Array(await blob.arrayBuffer());
+    let contentType = blob.type || "image/jpeg";
     const fileName = storagePath.split("/").pop() ?? "selfie.jpg";
+
+    // Preprocessing: run Photo Enhance so low-light / blurry selfies get
+    // sharper input for the analysis. Soft-fails to the original bytes —
+    // the enhanced copy lives only in memory, the stored selfie is untouched.
+    let enhanced = false;
+    try {
+      const enhancedUrl = await runPerfectCorpTask({
+        featureName: "enhance",
+        bytes,
+        contentType,
+        fileName,
+        taskParams: { scale: 1 },
+      });
+      const enhRes = await fetch(enhancedUrl);
+      if (!enhRes.ok) throw new Error(`fetch enhanced ${enhRes.status}`);
+      const enhBlob = await enhRes.blob();
+      bytes = new Uint8Array(await enhBlob.arrayBuffer());
+      contentType = enhBlob.type || contentType;
+      enhanced = true;
+    } catch (err) {
+      console.warn("photo enhance failed (using original selfie):", err);
+    }
 
     const resultUrl = await runPerfectCorpTask({
       featureName: "skin-analysis",
@@ -174,7 +196,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const overall_score = pickOverallScore(raw);
 
     return jsonResponse({
-      data: { metrics, skin_age, overall_score, raw_response: raw },
+      data: { metrics, skin_age, overall_score, raw_response: raw, enhanced },
     });
   } catch (err) {
     console.error("analyze-skin error:", err);

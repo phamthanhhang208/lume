@@ -1,14 +1,21 @@
 // Edge Function: simulate-skin
 //
-// Input  : { scan_id: string }
-// Output : { data: { simulation_image_url, concerns_simulated, cached } }
+// Input  : { scan_id: string, product_ids?: string[] }
+// Output : { data: { simulation_image_url, cached, routine_conditioned,
+//                    concerns_simulated, concerns_uncovered,
+//                    coverage_reasoning } }
 // Errors : { error: { code, message } }
 //
-// Reads the user's scan, derives the 5 lowest-scoring skin concerns, asks
-// Perfect Corp Skin Simulation to render an after-image of those concerns
-// improving, and caches the result on scans.simulation_image_url. Idempotent:
-// a second call returns the cached image without re-spending Perfect Corp
-// quota.
+// Renders a "your skin in 4 weeks" preview with Perfect Corp Skin
+// Simulation. The products driving the estimate come from, in order:
+//   1. an explicit product_ids selection (cache bypassed — every selection
+//      gets a fresh render),
+//   2. the scan's "works" verdicts (routine-conditioned, the default), or
+//   3. a metric-severity fallback when neither exists.
+// In modes 1-2 Gemini estimates a per-concern intensity from the products'
+// ingredients; concerns below 0.3 are reported as uncovered so the UI can
+// say what the routine does NOT address. Cached on
+// scans.simulation_image_url for the no-selection path.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { Image } from "https://deno.land/x/imagescript@1.2.17/mod.ts";
@@ -101,9 +108,6 @@ async function normalizeForPC(
 // — concerns are flat top-level keys, not wrapped in dst_actions/params.
 // All 10 concerns must be present (use 0.0 to skip); at least one > 0.0.
 // Intensity is 0.0–1.0 (0 = no change, 1.0 = max natural correction).
-
-// All 10 concern keys PC's skin-simulation accepts. Order matches the curl
-// example in the docs; defaults to 0.0 for concerns we don't want to correct.
 const PC_CONCERNS = [
   "wrinkle",
   "radiance",
@@ -133,14 +137,23 @@ const METRIC_TO_CONCERN: Record<string, string> = {
   oiliness: "oiliness",
 };
 
+const CONCERN_TO_METRIC: Record<string, string> = Object.fromEntries(
+  Object.entries(METRIC_TO_CONCERN).map(([m, c]) => [c, m]),
+);
+
 const LOW_SCORE_CUTOFF = 85;
 const MAX_CONCERNS = 5;
+// Below this Gemini intensity a concern counts as "not covered" by the
+// products, for the coverage chips.
+const COVERED_THRESHOLD = 0.3;
 
-// Gemini returns one intensity per PC concern. Schema generated from PC_CONCERNS.
-const intensitiesSchema = z.object(
-  Object.fromEntries(PC_CONCERNS.map((c) => [c, z.number().min(0).max(1)])) as
-    Record<(typeof PC_CONCERNS)[number], z.ZodNumber>,
-);
+// Gemini returns one intensity per PC concern (+ a short reasoning line).
+const intensitiesSchema = z.object({
+  ...(Object.fromEntries(
+    PC_CONCERNS.map((c) => [c, z.number().min(0).max(1)]),
+  ) as Record<(typeof PC_CONCERNS)[number], z.ZodNumber>),
+  reasoning: z.string().optional().default(""),
+});
 
 interface ProductForPrompt {
   name: string | null;
@@ -179,7 +192,7 @@ For each of these 10 skin concerns, return a simulation intensity (0.0-1.0). The
 
 Concerns: ${PC_CONCERNS.join(", ")}
 
-Return JSON with all 10 keys.`;
+Return JSON with all 10 concern keys plus "reasoning": one sentence naming which product addresses what.`;
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -205,7 +218,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     const { data: scan, error: scanErr } = await supabase
       .from("scans")
-      .select("id, user_id, image_url, metrics, simulation_image_url")
+      .select("id, user_id, image_url, metrics, simulation_image_url, simulation_meta")
       .eq("id", scanId)
       .maybeSingle();
     if (scanErr) throw scanErr;
@@ -215,20 +228,45 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
 
     // Bypass cache when product selection is provided — each selection should
-    // produce a fresh simulation reflecting those products' effects.
+    // produce a fresh simulation reflecting those products' effects. A cached
+    // hit returns the persisted coverage meta alongside the image.
     if (!hasSelection && scan.simulation_image_url) {
+      const meta = (scan.simulation_meta ?? {}) as Record<string, unknown>;
       return jsonResponse({
         data: {
           simulation_image_url: scan.simulation_image_url,
-          concerns_simulated: [],
           cached: true,
+          routine_conditioned: meta.routine_conditioned === true,
+          concerns_simulated: Array.isArray(meta.concerns_simulated)
+            ? meta.concerns_simulated
+            : [],
+          concerns_uncovered: Array.isArray(meta.concerns_uncovered)
+            ? meta.concerns_uncovered
+            : [],
+          coverage_reasoning:
+            typeof meta.coverage_reasoning === "string"
+              ? meta.coverage_reasoning
+              : null,
         },
       });
     }
 
     const metrics = (scan.metrics ?? {}) as Record<string, number>;
-    let intensities: Record<string, number>;
+    // Low-scoring metrics, mapped to PC concerns — the set the chips report on.
+    const lowConcernEntries = Object.entries(metrics)
+      .filter(
+        (entry): entry is [string, number] =>
+          entry[0] in METRIC_TO_CONCERN &&
+          typeof entry[1] === "number" &&
+          Number.isFinite(entry[1]) &&
+          entry[1] < LOW_SCORE_CUTOFF,
+      )
+      .sort(([, a], [, b]) => a - b)
+      .slice(0, MAX_CONCERNS);
 
+    // Resolve which products drive the estimate.
+    let products: ProductForPrompt[] | null = null;
+    let routineConditioned = false;
     if (hasSelection) {
       const { data: prods, error: prodErr } = await supabase
         .from("products")
@@ -237,59 +275,107 @@ Deno.serve(async (req: Request): Promise<Response> => {
         .eq("category", "skincare");
       if (prodErr) throw prodErr;
       if (!prods || prods.length === 0) {
-        return errorResponse(
-          "no_products",
-          "selected products not found",
-          400,
-        );
+        return errorResponse("no_products", "selected products not found", 400);
       }
-      const fromGemini = await callGeminiJson({
-        prompt: buildGeminiPrompt(metrics, prods as ProductForPrompt[]),
-        geminiSchema: {
-          type: "OBJECT",
-          properties: Object.fromEntries(
-            PC_CONCERNS.map((c) => [c, { type: "NUMBER" }]),
-          ),
-          required: [...PC_CONCERNS],
-        },
-        validator: intensitiesSchema,
-      });
-      intensities = { ...fromGemini };
-      console.log(
-        "simulate-skin: gemini intensities:",
-        JSON.stringify(intensities),
-      );
+      products = prods as ProductForPrompt[];
     } else {
-      // Fallback: metric-based selection (5 lowest concerns).
-      const lowConcerns = Object.entries(metrics)
-        .filter(
-          (entry): entry is [string, number] =>
-            entry[0] in METRIC_TO_CONCERN &&
-            typeof entry[1] === "number" &&
-            Number.isFinite(entry[1]) &&
-            entry[1] < LOW_SCORE_CUTOFF,
-        )
-        .sort(([, a], [, b]) => a - b)
-        .slice(0, MAX_CONCERNS);
-      intensities = Object.fromEntries(PC_CONCERNS.map((c) => [c, 0]));
-      for (const [key, score] of lowConcerns) {
-        const concern = METRIC_TO_CONCERN[key];
-        const raw = (LOW_SCORE_CUTOFF - score) / LOW_SCORE_CUTOFF;
-        const intensity = Math.min(1, Math.max(0.3, Number(raw.toFixed(2))));
-        intensities[concern] = intensity;
+      // Routine conditioning: use the scan's "works" verdicts as the implied
+      // selection. Soft-fails to the metric-based fallback. Note: a cached
+      // simulation goes stale if verdicts are regenerated on the same scan —
+      // acceptable, a re-scan creates a fresh cache.
+      try {
+        const { data: worksVerdicts, error: verdictsErr } = await supabase
+          .from("verdicts")
+          .select("product_id")
+          .eq("scan_id", scanId)
+          .eq("verdict", "works");
+        if (verdictsErr) throw verdictsErr;
+        const worksIds = (worksVerdicts ?? []).map(
+          (v: { product_id: string }) => v.product_id,
+        );
+        if (worksIds.length > 0) {
+          const { data: prods, error: prodErr } = await supabase
+            .from("products")
+            .select("name, brand, ingredients")
+            .in("id", worksIds);
+          if (prodErr) throw prodErr;
+          if (prods && prods.length > 0) {
+            products = prods as ProductForPrompt[];
+            routineConditioned = true;
+          }
+        }
+      } catch (err) {
+        console.warn("works-verdict lookup failed (metric fallback):", err);
       }
     }
 
-    const concerns = Object.entries(intensities)
-      .filter(([, v]) => v > 0)
-      .map(([k]) => k);
+    let intensities: Record<string, number>;
+    let coverageReasoning: string | null = null;
+    if (products) {
+      try {
+        const fromGemini = await callGeminiJson({
+          prompt: buildGeminiPrompt(metrics, products),
+          geminiSchema: {
+            type: "OBJECT",
+            properties: {
+              ...Object.fromEntries(
+                PC_CONCERNS.map((c) => [c, { type: "NUMBER" }]),
+              ),
+              reasoning: { type: "STRING" },
+            },
+            required: [...PC_CONCERNS],
+          },
+          validator: intensitiesSchema,
+        });
+        const { reasoning, ...concernValues } = fromGemini;
+        intensities = concernValues;
+        coverageReasoning = reasoning || null;
+        console.log("simulate-skin: gemini intensities:", JSON.stringify(intensities));
+      } catch (err) {
+        console.warn("gemini intensities failed (metric fallback):", err);
+        products = null;
+        routineConditioned = false;
+        intensities = {};
+      }
+    } else {
+      intensities = {};
+    }
 
-    if (concerns.length === 0) {
+    if (!products) {
+      // Fallback: metric-based selection (5 lowest concerns).
+      intensities = Object.fromEntries(PC_CONCERNS.map((c) => [c, 0]));
+      for (const [key, score] of lowConcernEntries) {
+        const concern = METRIC_TO_CONCERN[key];
+        const raw = (LOW_SCORE_CUTOFF - score) / LOW_SCORE_CUTOFF;
+        intensities[concern] = Math.min(1, Math.max(0.3, Number(raw.toFixed(2))));
+      }
+    }
+
+    // Coverage chips: of the user's low-scoring concerns, which does the
+    // simulation meaningfully address?
+    const concernsSimulated: string[] = [];
+    const concernsUncovered: string[] = [];
+    for (const [metricKey] of lowConcernEntries) {
+      const concern = METRIC_TO_CONCERN[metricKey];
+      if ((intensities[concern] ?? 0) >= COVERED_THRESHOLD) {
+        concernsSimulated.push(metricKey);
+      } else {
+        concernsUncovered.push(metricKey);
+      }
+    }
+
+    const anyIntensity = Object.values(intensities).some((v) => v > 0);
+    if (!anyIntensity) {
+      // Nothing to render honestly (no low concerns, or the routine covers
+      // none of them) — skip the Perfect Corp call entirely.
       return jsonResponse({
         data: {
           simulation_image_url: null,
-          concerns_simulated: [],
           cached: false,
+          routine_conditioned: routineConditioned,
+          concerns_simulated: [],
+          concerns_uncovered: concernsUncovered,
+          coverage_reasoning: coverageReasoning,
         },
       });
     }
@@ -330,17 +416,23 @@ Deno.serve(async (req: Request): Promise<Response> => {
       });
     if (upErr) throw upErr;
 
+    const simulationMeta = {
+      routine_conditioned: routineConditioned,
+      concerns_simulated: concernsSimulated,
+      concerns_uncovered: concernsUncovered,
+      coverage_reasoning: coverageReasoning,
+    };
     const { error: updErr } = await supabase
       .from("scans")
-      .update({ simulation_image_url: simPath })
+      .update({ simulation_image_url: simPath, simulation_meta: simulationMeta })
       .eq("id", scanId);
     if (updErr) throw updErr;
 
     return jsonResponse({
       data: {
         simulation_image_url: simPath,
-        concerns_simulated: concerns,
         cached: false,
+        ...simulationMeta,
       },
     });
   } catch (err) {

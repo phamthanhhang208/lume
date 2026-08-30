@@ -3,8 +3,10 @@ import { Link } from "react-router";
 
 import VerdictTag from "@/components/ui/VerdictTag";
 import { useProducts } from "@/features/products/api/useProducts";
+import { useRoutines } from "@/features/routines/api/useRoutines";
 import { useLatestScan } from "@/features/scans/api/useLatestScan";
 import { useSelfieSignedUrls } from "@/features/scans/api/useSelfieSignedUrls";
+import { useSimulateAgingMutation } from "@/features/scans/api/useSimulateAgingMutation";
 import { useSimulateSkinMutation } from "@/features/scans/api/useSimulateSkinMutation";
 import { useLatestVerdicts } from "@/features/verdicts/api/useLatestVerdicts";
 import type { Product } from "@/types/database";
@@ -13,10 +15,44 @@ export default function Verdict() {
   const scan = useLatestScan();
   const verdicts = useLatestVerdicts();
   const products = useProducts();
+  const routines = useRoutines();
+  const activeRoutine = routines.data?.find(
+    (routine) => routine.is_active && routine.product_ids.length > 0,
+  );
   const simulate = useSimulateSkinMutation();
+  const simulateAging = useSimulateAgingMutation();
+  // Coverage chips survive reloads: prefer the fresh mutation result, fall
+  // back to the meta persisted on the scan row with the cached image.
+  const storedMeta = scan.data?.simulation_meta as
+    | {
+        routine_conditioned?: unknown;
+        concerns_simulated?: unknown;
+        concerns_uncovered?: unknown;
+        coverage_reasoning?: unknown;
+      }
+    | null
+    | undefined;
+  const coverage: CoverageInfo | undefined = simulate.data
+    ? simulate.data
+    : storedMeta && scan.data?.simulation_image_url
+      ? {
+          routineConditioned: storedMeta.routine_conditioned === true,
+          concernsSimulated: Array.isArray(storedMeta.concerns_simulated)
+            ? (storedMeta.concerns_simulated as string[])
+            : [],
+          concernsUncovered: Array.isArray(storedMeta.concerns_uncovered)
+            ? (storedMeta.concerns_uncovered as string[])
+            : [],
+          coverageReasoning:
+            typeof storedMeta.coverage_reasoning === "string"
+              ? storedMeta.coverage_reasoning
+              : null,
+        }
+      : undefined;
   const selfieUrls = useSelfieSignedUrls([
     scan.data?.image_url,
     scan.data?.simulation_image_url,
+    scan.data?.aging_image_url,
   ]);
 
   if (verdicts.isPending || products.isPending || scan.isPending) {
@@ -50,6 +86,12 @@ export default function Verdict() {
             scan from {new Date(scan.data.created_at).toLocaleDateString()}
           </p>
         )}
+        <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.08em] text-ink-soft">
+          grading: {activeRoutine ? activeRoutine.name : "everything you own"} ·{" "}
+          <Link to="/routines" className="underline">
+            manage routines
+          </Link>
+        </p>
       </div>
 
       {/* Summary row */}
@@ -149,7 +191,7 @@ export default function Verdict() {
       {scan.data && (
         <SimulationSection
           selfiePath={scan.data.image_url}
-          simulationPath={scan.data.simulation_image_url}
+          afterPath={scan.data.simulation_image_url}
           urls={selfieUrls.data ?? {}}
           isPending={simulate.isPending}
           error={simulate.error?.message ?? null}
@@ -159,6 +201,25 @@ export default function Verdict() {
           onSimulate={(productIds) =>
             simulate.mutate({ scanId: scan.data!.id, productIds })
           }
+          footer={<CoverageFooter info={coverage} />}
+        />
+      )}
+
+      {/* Aging preview */}
+      {scan.data && (
+        <BeforeAfterCard
+          title="fast forward"
+          idleTitle="fast forward a few decades"
+          description="Perfect Corp AI aging simulation — a generic preview of facial aging, not conditioned on your routine. skincare habits still matter, but this image doesn't measure them."
+          idleDescription="curious? see an AI aging simulation of your selfie. it's generic — not a prediction based on your routine."
+          afterCaption="older you"
+          buttonLabel="see your future face"
+          selfiePath={scan.data.image_url}
+          afterPath={scan.data.aging_image_url}
+          urls={selfieUrls.data ?? {}}
+          isPending={simulateAging.isPending}
+          error={simulateAging.error?.message ?? null}
+          onGenerate={() => simulateAging.mutate({ scanId: scan.data!.id })}
         />
       )}
 
@@ -183,28 +244,73 @@ export default function Verdict() {
   );
 }
 
+function BeforeAfterImages({
+  beforeUrl,
+  afterUrl,
+  afterCaption,
+}: {
+  beforeUrl: string | undefined;
+  afterUrl: string | null | undefined;
+  afterCaption: string;
+}) {
+  return (
+    <div className="mt-3 grid grid-cols-2 gap-2">
+      <figure>
+        {beforeUrl ? (
+          <img
+            src={beforeUrl}
+            alt="before"
+            className="aspect-square w-full rounded-xl object-cover"
+          />
+        ) : (
+          <div className="aspect-square w-full rounded-xl bg-cream" />
+        )}
+        <figcaption className="mt-1 text-center font-mono text-[9px] uppercase tracking-[0.08em] text-ink-soft">
+          today
+        </figcaption>
+      </figure>
+      <figure>
+        {afterUrl ? (
+          <img
+            src={afterUrl}
+            alt="after"
+            className="aspect-square w-full rounded-xl object-cover"
+          />
+        ) : (
+          <div className="aspect-square w-full rounded-xl bg-cream" />
+        )}
+        <figcaption className="mt-1 text-center font-mono text-[9px] uppercase tracking-[0.08em] text-ink-soft">
+          {afterCaption}
+        </figcaption>
+      </figure>
+    </div>
+  );
+}
+
 interface SimulationSectionProps {
   selfiePath: string;
-  simulationPath: string | null;
+  afterPath: string | null;
   urls: Record<string, string>;
   isPending: boolean;
   error: string | null;
   skincare: Product[];
   onSimulate: (productIds: string[]) => void;
+  footer?: React.ReactNode;
 }
 
 function SimulationSection({
   selfiePath,
-  simulationPath,
+  afterPath,
   urls,
   isPending,
   error,
   skincare,
   onSimulate,
+  footer,
 }: SimulationSectionProps) {
   const beforeUrl = urls[selfiePath];
-  const afterUrl = simulationPath ? urls[simulationPath] : null;
-  const hasSimulation = !!simulationPath;
+  const afterUrl = afterPath ? urls[afterPath] : null;
+  const hasSimulation = !!afterPath;
 
   const allIds = useMemo(() => skincare.map((p) => p.id), [skincare]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
@@ -234,36 +340,11 @@ function SimulationSection({
         </p>
 
         {hasSimulation && (
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <figure>
-              {beforeUrl ? (
-                <img
-                  src={beforeUrl}
-                  alt="before"
-                  className="aspect-square w-full rounded-xl object-cover"
-                />
-              ) : (
-                <div className="aspect-square w-full rounded-xl bg-cream" />
-              )}
-              <figcaption className="mt-1 text-center font-mono text-[9px] uppercase tracking-[0.08em] text-ink-soft">
-                today
-              </figcaption>
-            </figure>
-            <figure>
-              {afterUrl ? (
-                <img
-                  src={afterUrl}
-                  alt="after"
-                  className="aspect-square w-full rounded-xl object-cover"
-                />
-              ) : (
-                <div className="aspect-square w-full rounded-xl bg-cream" />
-              )}
-              <figcaption className="mt-1 text-center font-mono text-[9px] uppercase tracking-[0.08em] text-ink-soft">
-                4 weeks
-              </figcaption>
-            </figure>
-          </div>
+          <BeforeAfterImages
+            beforeUrl={beforeUrl}
+            afterUrl={afterUrl}
+            afterCaption="4 weeks"
+          />
         )}
 
         {skincare.length === 0 && (
@@ -323,10 +404,131 @@ function SimulationSection({
           </>
         )}
 
+        {footer}
+
         {error && (
           <p className="mt-2 font-sans text-xs text-rose-deep">{error}</p>
         )}
       </div>
+    </div>
+  );
+}
+
+interface BeforeAfterCardProps {
+  title: string;
+  idleTitle: string;
+  description: string;
+  idleDescription: string;
+  afterCaption: string;
+  buttonLabel: string;
+  selfiePath: string;
+  afterPath: string | null;
+  urls: Record<string, string>;
+  isPending: boolean;
+  error: string | null;
+  onGenerate: () => void;
+}
+
+function BeforeAfterCard({
+  title,
+  idleTitle,
+  description,
+  idleDescription,
+  afterCaption,
+  buttonLabel,
+  selfiePath,
+  afterPath,
+  urls,
+  isPending,
+  error,
+  onGenerate,
+}: BeforeAfterCardProps) {
+  const beforeUrl = urls[selfiePath];
+  const afterUrl = afterPath ? urls[afterPath] : null;
+  const hasResult = !!afterPath;
+
+  return (
+    <div className="mx-4 mt-6 lg:mx-auto lg:max-w-3xl lg:px-4">
+      <div className="rounded-2xl border border-black/[0.08] bg-white p-4">
+        <h3 className="font-hand text-xl font-semibold text-ink">
+          {hasResult ? title : idleTitle}
+        </h3>
+        <p className="mt-1 font-sans text-xs text-ink-soft">
+          {hasResult ? description : idleDescription}
+        </p>
+
+        {hasResult && (
+          <BeforeAfterImages
+            beforeUrl={beforeUrl}
+            afterUrl={afterUrl}
+            afterCaption={afterCaption}
+          />
+        )}
+
+        {!hasResult && (
+          <button
+            type="button"
+            onClick={onGenerate}
+            disabled={isPending}
+            className="mt-3 w-full rounded-full py-3 font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-white disabled:opacity-40"
+            style={{ background: "#7CB89C", boxShadow: "0 4px 14px rgba(124,184,156,.4)" }}
+          >
+            {isPending ? "simulating… (~20s)" : buttonLabel}
+          </button>
+        )}
+
+        {error && (
+          <p className="mt-2 font-sans text-xs text-rose-deep">{error}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface CoverageInfo {
+  routineConditioned: boolean;
+  concernsSimulated: string[];
+  concernsUncovered: string[];
+  coverageReasoning: string | null;
+}
+
+// Coverage chips for the simulation card. Persisted with the render on
+// scans.simulation_meta, so they survive page reloads.
+function CoverageFooter({ info }: { info: CoverageInfo | undefined }) {
+  if (!info) return null;
+  const { routineConditioned, concernsSimulated, concernsUncovered, coverageReasoning } = info;
+  if (
+    concernsSimulated.length === 0 &&
+    concernsUncovered.length === 0 &&
+    !coverageReasoning
+  ) {
+    return null;
+  }
+
+  const coversLabel = routineConditioned ? "routine covers" : "these products cover";
+  const noneCovered = concernsSimulated.length === 0 && concernsUncovered.length > 0;
+
+  return (
+    <div className="mt-2 flex flex-col gap-1">
+      {concernsSimulated.length > 0 && (
+        <p className="font-mono text-[9.5px] uppercase tracking-[0.06em]" style={{ color: "#7CB89C" }}>
+          {coversLabel}: {concernsSimulated.join(", ")}
+        </p>
+      )}
+      {concernsUncovered.length > 0 && (
+        <p className="font-mono text-[9.5px] uppercase tracking-[0.06em]" style={{ color: "#B08D3E" }}>
+          not covered yet: {concernsUncovered.join(", ")}
+        </p>
+      )}
+      {noneCovered && (
+        <p className="font-sans text-xs text-ink">
+          these products don't target your lowest concerns yet — nothing to
+          simulate honestly. try adding products for the concerns above.
+        </p>
+      )}
+      {coverageReasoning && (
+        <p className="font-sans text-xs text-ink-soft">{coverageReasoning}</p>
+      )}
     </div>
   );
 }

@@ -7,6 +7,7 @@ export interface Profile {
   saved_selfie_url: string | null;
   skin_tone_data: unknown;
   face_data: unknown;
+  skin_type_data: unknown;
   created_at: string;
   updated_at: string;
 }
@@ -51,6 +52,8 @@ export interface Scan {
   overall_score: number;
   raw_response: unknown;
   simulation_image_url: string | null;
+  simulation_meta: unknown;
+  aging_image_url: string | null;
   created_at: string;
 }
 
@@ -64,11 +67,24 @@ export interface Verdict {
   created_at: string;
 }
 
+export interface Routine {
+  id: string;
+  user_id: string;
+  name: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface RoutineWithProducts extends Routine {
+  product_ids: string[];
+}
+
 export interface Look {
   id: string;
   user_id: string;
   prompt: string;
   result_image_url: string | null;
+  reference_image_url: string | null;
   products_used: Array<{ product_id: string; slot: string }>;
   gemini_reasoning: string | null;
   created_at: string;

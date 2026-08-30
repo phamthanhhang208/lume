@@ -19,6 +19,8 @@ export default function BlobPreview({ blob, alt, className }: BlobPreviewProps) 
 
   useEffect(() => {
     const objectUrl = URL.createObjectURL(blob);
+    // Object URLs must be created after render so the cleanup can revoke them.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setUrl(objectUrl);
     return () => {
       URL.revokeObjectURL(objectUrl);

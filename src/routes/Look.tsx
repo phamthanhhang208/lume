@@ -1,6 +1,7 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { Link } from "react-router";
 
+import { useAuth } from "@/features/auth/api/useAuth";
 import { useProducts } from "@/features/products/api/useProducts";
 import {
   useGenerateLookMutation,
@@ -9,6 +10,7 @@ import {
 import { useDeleteLookMutation } from "@/features/looks/api/useDeleteLookMutation";
 import { useLooks } from "@/features/looks/api/useLooks";
 import { useLookSignedUrls } from "@/features/looks/api/useLookSignedUrls";
+import { useTransferLookMutation } from "@/features/looks/api/useTransferLookMutation";
 import type { Look as LookRow, Product } from "@/types/database";
 
 const SUGGESTIONS = [
@@ -22,14 +24,17 @@ const SUGGESTIONS = [
 type Step = 1 | 2 | 3;
 
 export default function Look() {
+  const { user } = useAuth();
   const [step, setStep] = useState<Step>(1);
   const [prompt, setPrompt] = useState("");
   const [latest, setLatest] = useState<GeneratedLook | null>(null);
   const [generateError, setGenerateError] = useState<string | null>(null);
 
   const generate = useGenerateLookMutation();
+  const transfer = useTransferLookMutation();
   const looks = useLooks();
   const products = useProducts();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   // Include `latest` in the signed-URL query immediately — before `looks.data`
   // refetches — so the VTO image shows on step 3 without waiting.
   const allLooksForUrls = [
@@ -41,6 +46,8 @@ export default function Look() {
 
   const productsById: Record<string, Product> = {};
   for (const product of products.data ?? []) productsById[product.id] = product;
+
+  const busy = generate.isPending || transfer.isPending;
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -70,6 +77,27 @@ export default function Look() {
     1: "what's the vibe?",
     2: "casting your look…",
     3: "your look",
+  };
+
+  const onReferencePicked = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !user) return;
+    setGenerateError(null);
+    transfer.mutate(
+      { userId: user.id, blob: file, title: file.name },
+      {
+        onSuccess: (look) => {
+          setLatest(look);
+          setStep(3);
+        },
+        onError: (err) => {
+          setGenerateError(
+            err instanceof Error ? err.message : "something went wrong",
+          );
+        },
+      },
+    );
   };
 
   return (
@@ -141,7 +169,7 @@ export default function Look() {
                 />
                 <button
                   type="submit"
-                  disabled={!prompt.trim()}
+                  disabled={!prompt.trim() || busy}
                   className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-none text-white transition-colors disabled:opacity-40"
                   style={{ background: prompt.trim().length > 1 ? "#E37B8C" : "#FBF6F4" }}
                 >
@@ -150,6 +178,31 @@ export default function Look() {
                   </svg>
                 </button>
               </form>
+            </div>
+
+            {/* Steal a look */}
+            <div className="mt-4 rounded-2xl border border-black/[0.08] bg-white p-4">
+              <h2 className="font-hand text-xl font-semibold text-ink">or steal a look</h2>
+              <p className="mt-1 font-sans text-xs leading-relaxed text-ink-soft">
+                upload a photo of a makeup look you love — Perfect Corp
+                transfers it onto your selfie and we match it to products you
+                own. this can take 20–40 seconds.
+              </p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={onReferencePicked}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={busy || !user}
+                className="mt-3 w-full rounded-full border border-black/25 bg-transparent py-3 font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink disabled:opacity-40"
+              >
+                {transfer.isPending ? "stealing that look…" : "upload a reference photo"}
+              </button>
             </div>
 
             {/* Suggestion chips */}
@@ -256,7 +309,8 @@ export default function Look() {
               </button>
             </div>
 
-            {/* History below the result */}
+            {/* History below the result — the fresh look is already the big
+                card above, so keep it out of the list (Novus UX review). */}
             <div className="mt-8">
               <h2 className="mb-0.5 font-hand text-xl font-semibold text-ink">previous looks</h2>
               <svg width="80" height="8" viewBox="0 0 80 8" style={{ display: "block", marginBottom: 10 }}>
@@ -264,7 +318,7 @@ export default function Look() {
               </svg>
               {looks.data && looks.data.length > 0 && (
                 <div className="flex flex-col gap-3">
-                  {looks.data.map((look) => (
+                  {looks.data.filter((look) => look.id !== latest.id).map((look) => (
                     <LookHistoryRow
                       key={look.id}
                       look={look}
@@ -348,6 +402,9 @@ interface LookResultProps {
 
 function LookResult({ look, productsById, lookUrls }: LookResultProps) {
   const signedUrl = look.result_image_url ? lookUrls?.[look.result_image_url] : undefined;
+  const referenceUrl = look.reference_image_url
+    ? lookUrls?.[look.reference_image_url]
+    : undefined;
   const [lightbox, setLightbox] = useState(false);
 
   return (
@@ -356,8 +413,44 @@ function LookResult({ look, productsById, lookUrls }: LookResultProps) {
         <ImageLightbox src={signedUrl} alt={`look: ${look.prompt}`} onClose={() => setLightbox(false)} />
       )}
     <div className="mt-4 rounded-2xl border border-black/[0.10] bg-white overflow-hidden" style={{ boxShadow: "0 2px 6px rgba(20,18,14,.08), 0 12px 28px rgba(60,40,20,.14)" }}>
-      {/* VTO image */}
-      {signedUrl ? (
+      {/* Stolen looks render reference | result side by side */}
+      {referenceUrl ? (
+        <div className="grid grid-cols-2 gap-1 p-1">
+          <figure>
+            <img
+              src={referenceUrl}
+              alt="reference look"
+              className="aspect-[3/4] w-full rounded-lg object-cover"
+            />
+            <figcaption className="mt-1 text-center font-mono text-[9px] uppercase tracking-[0.08em] text-ink-soft">
+              the look
+            </figcaption>
+          </figure>
+          <figure>
+            {signedUrl ? (
+              <button
+                type="button"
+                className="block w-full"
+                onClick={() => setLightbox(true)}
+                aria-label="View full image"
+              >
+                <img
+                  src={signedUrl}
+                  alt="you wearing the look"
+                  className="aspect-[3/4] w-full rounded-lg object-cover"
+                />
+              </button>
+            ) : (
+              <div className="flex aspect-[3/4] w-full items-center justify-center rounded-lg bg-cream font-mono text-[9px] text-ink-faint">
+                render unavailable
+              </div>
+            )}
+            <figcaption className="mt-1 text-center font-mono text-[9px] uppercase tracking-[0.08em] text-ink-soft">
+              on you
+            </figcaption>
+          </figure>
+        </div>
+      ) : signedUrl ? (
         <button
           type="button"
           className="relative w-full block group"

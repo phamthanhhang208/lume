@@ -14,7 +14,8 @@ Extends `auth.users` with app-specific data.
 | display_name     | text        | Nullable                                                                                                            |
 | saved_selfie_url | text        | Nullable. URL into Supabase Storage. Used for VTO and as reusable Skin Analysis input                               |
 | skin_tone_data   | jsonb       | Nullable. Result of Perfect Corp Skin Tone Analysis (skin tone class, eye color, lip color, brow color, hair color) |
-| face_data        | jsonb       | Nullable. Result of Perfect Corp AI Face Analyzer (face shape, landmarks summary)                                   |
+| face_data        | jsonb       | Nullable. Result of Perfect Corp Face Attributes analysis (face shape, eye shape, eyelid, brow shape, lip shape)    |
+| skin_type_data   | jsonb       | Nullable. Result of Perfect Corp Fitzpatrick Skin Type Analysis (`{fitzpatrick_type: "I".."VI"}`)                   |
 | created_at       | timestamptz | default now()                                                                                                       |
 | updated_at       | timestamptz | default now()                                                                                                       |
 
@@ -48,11 +49,13 @@ A user's skin analysis result at a point in time.
 | id                    | uuid (PK)   | default gen_random_uuid()                                                                                            |
 | user_id               | uuid (FK)   | References `auth.users.id`                                                                                           |
 | image_url             | text        | Path under `selfies` bucket. The selfie analyzed                                                                     |
-| metrics               | jsonb       | Object with 14 skin metrics, each a numeric score                                                                    |
+| metrics               | jsonb       | Object with 13 skin metrics, each a numeric score                                                                    |
 | skin_age              | int         | Result of Perfect Corp Skin Analysis                                                                                 |
 | overall_score         | int         | Aggregate score from API                                                                                             |
 | raw_response          | jsonb       | Full API response, kept for debugging and re-analysis                                                                |
 | simulation_image_url  | text \| null | Path under `selfies` bucket to the Perfect Corp Skin Simulation result, if the user has tapped "preview my skin". Cached after first generation. |
+| simulation_meta       | jsonb \| null | Coverage explanation persisted with the render: `{routine_conditioned, concerns_simulated, concerns_uncovered, coverage_reasoning}`. |
+| aging_image_url       | text \| null | Path under `selfies` bucket to the Perfect Corp AI Aging result (oldest frame of the series). Cached after first generation. |
 | created_at            | timestamptz | default now()                                                                                                        |
 
 The `metrics` JSON structure (locked in once we verify against Perfect Corp's response):
@@ -96,19 +99,47 @@ Unique constraint on `(scan_id, product_id)` — one verdict per product per sca
 
 Indexes: `(user_id, product_id)` for product detail view, `(scan_id)` for verdict grid view.
 
+### routines
+
+A named, user-curated subset of products ("what I actually use"). At most
+one routine per user is active (partial unique index); `generate-verdict`
+grades the active routine's products and falls back to the whole shelf when
+no non-empty active routine exists.
+
+| Column     | Type        | Notes                              |
+| ---------- | ----------- | ---------------------------------- |
+| id         | uuid (PK)   | default gen_random_uuid()          |
+| user_id    | uuid (FK)   | References `auth.users.id`         |
+| name       | text        | e.g. "everyday", "barrier repair"  |
+| is_active  | boolean     | default false; max one per user    |
+| created_at | timestamptz | default now()                      |
+
+### routine_products
+
+Join table; ownership enforced through the parent routine's RLS.
+
+| Column     | Type        | Notes                                  |
+| ---------- | ----------- | -------------------------------------- |
+| routine_id | uuid (FK)   | References `routines.id`, cascade      |
+| product_id | uuid (FK)   | References `products.id`, cascade      |
+| added_at   | timestamptz | default now()                          |
+
+Primary key: `(routine_id, product_id)`.
+
 ### looks
 
 A generated makeup look.
 
 | Column           | Type        | Notes                                                                 |
 | ---------------- | ----------- | --------------------------------------------------------------------- |
-| id               | uuid (PK)   | default gen_random_uuid()                                             |
-| user_id          | uuid (FK)   | References `auth.users.id`                                            |
-| prompt           | text        | The user's input, e.g. "clean girl makeup"                            |
-| result_image_url | text        | URL into Supabase Storage. VTO output                                 |
-| products_used    | jsonb       | Array of `{product_id, slot}` where slot is "foundation"/"blush"/etc. |
-| gemini_reasoning | text        | Nullable. Why Gemini picked these products                            |
-| created_at       | timestamptz | default now()                                                         |
+| id                  | uuid (PK)   | default gen_random_uuid()                                             |
+| user_id             | uuid (FK)   | References `auth.users.id`                                            |
+| prompt              | text        | The user's input, e.g. "clean girl makeup", or `steal: <title>`       |
+| result_image_url    | text        | Path under `looks` bucket. VTO / Makeup Transfer output               |
+| reference_image_url | text \| null | Path under `looks` bucket to the "steal this look" reference photo. Null for prompt-generated looks. |
+| products_used       | jsonb       | Array of `{product_id, slot}` where slot is "foundation"/"blush"/etc. |
+| gemini_reasoning    | text        | Nullable. Why Gemini picked these products                            |
+| created_at          | timestamptz | default now()                                                         |
 
 Indexes: `(user_id, created_at desc)`.
 

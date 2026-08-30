@@ -18,7 +18,23 @@ import { requireUser } from "../_shared/supabase.ts";
 
 interface FaceSummary {
   face_shape: string | null;
+  eye_shape: string | null;
+  eyelid: string | null;
+  eyebrow_shape: string | null;
+  lip_shape: string | null;
 }
+
+// Which face-attr-analysis features we request, and which summary key each
+// lands on. Existing users with a face_shape-only face_data won't refresh
+// automatically (the client only calls this when face_data is null) — a
+// re-scan on a fresh account picks up the full set.
+const FEATURES: Array<{ feature: string; key: keyof FaceSummary }> = [
+  { feature: "faceShape", key: "face_shape" },
+  { feature: "eyeShape", key: "eye_shape" },
+  { feature: "eyelid", key: "eyelid" },
+  { feature: "eyebrowShape", key: "eyebrow_shape" },
+  { feature: "lipShape", key: "lip_shape" },
+];
 
 function pickString(source: unknown, ...keys: string[]): string | null {
   if (!source || typeof source !== "object") return null;
@@ -30,15 +46,39 @@ function pickString(source: unknown, ...keys: string[]): string | null {
   return null;
 }
 
+// Each requested feature may come back as a bare string or an object like
+// { value: "oval" }, keyed by the camelCase feature name.
+function extractFeature(result: Record<string, unknown>, feature: string): string | null {
+  const node = result[feature];
+  if (typeof node === "string" && node.length > 0) return node.toLowerCase();
+  const nested = pickString(node, "value", "type", "name");
+  return nested ? nested.toLowerCase() : null;
+}
+
 function summarize(raw: unknown): FaceSummary {
-  if (!raw || typeof raw !== "object") return { face_shape: null };
+  const empty: FaceSummary = {
+    face_shape: null,
+    eye_shape: null,
+    eyelid: null,
+    eyebrow_shape: null,
+    lip_shape: null,
+  };
+  if (!raw || typeof raw !== "object") return empty;
   const obj = raw as Record<string, unknown>;
   const result =
     (obj.result as Record<string, unknown> | undefined) ??
     (obj.face as Record<string, unknown> | undefined) ??
     obj;
-  const shape = pickString(result, "face_shape", "faceShape", "shape");
-  return { face_shape: shape ? shape.toLowerCase() : null };
+  const out = { ...empty };
+  for (const { feature, key } of FEATURES) {
+    out[key] = extractFeature(result, feature);
+  }
+  // Legacy fallback for face shape keys seen in earlier responses.
+  if (!out.face_shape) {
+    const shape = pickString(result, "face_shape", "shape");
+    out.face_shape = shape ? shape.toLowerCase() : null;
+  }
+  return out;
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -77,10 +117,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const fileName = storagePath.split("/").pop() ?? "selfie.jpg";
 
     const resultUrl = await runPerfectCorpTask({
-      featureName: "face-analyzer",
+      featureName: "face-attr-analysis",
       bytes,
       contentType,
       fileName,
+      taskParams: { features: FEATURES.map((f) => f.feature) },
     });
 
     const resultRes = await fetch(resultUrl);

@@ -20,24 +20,15 @@ import { z } from "npm:zod@4";
 
 import { errorResponse, jsonResponse, preflight } from "../_shared/cors.ts";
 import { callGeminiJson } from "../_shared/gemini.ts";
+import {
+  buildMakeupEffects,
+  SLOT_TO_LEGACY_EFFECT,
+  VALID_MAKEUP_SLOTS,
+} from "../_shared/makeup.ts";
 import { runPerfectCorpTask } from "../_shared/perfectcorp.ts";
 import { requireUser } from "../_shared/supabase.ts";
 
-const SLOT_TO_EFFECT: Record<string, string> = {
-  foundation: "FoundationEffect",
-  concealer: "ConcealerEffect",
-  blush: "BlushEffect",
-  bronzer: "BronzerEffect",
-  contour: "ContourEffect",
-  highlighter: "HighlighterEffect",
-  lipstick: "LipColorEffect",
-  "lip liner": "LipLinerEffect",
-  eyeshadow: "EyeshadowEffect",
-  eyeliner: "EyelinerEffect",
-  eyelash: "EyelashesEffect",
-  eyebrow: "EyebrowsEffect",
-};
-const VALID_SLOTS = Object.keys(SLOT_TO_EFFECT);
+const VALID_SLOTS = VALID_MAKEUP_SLOTS;
 const VALID_CONCERNS = [
   "acne",
   "wrinkle",
@@ -51,6 +42,20 @@ const VALID_CONCERNS = [
   "firmness",
 ];
 
+// Skin Simulation takes top-level float params (0-1, 1 = most improved).
+// Concerns without a corresponding param (oiliness/moisture/firmness) are
+// classified but not simulated.
+const CONCERN_TO_SIM_PARAM: Record<string, string> = {
+  acne: "acne",
+  wrinkle: "wrinkle",
+  pore: "pores",
+  redness: "redness",
+  dark_spot: "spots",
+  dark_circle: "dark_circle",
+  texture: "texture",
+};
+const SIM_INTENSITY = 0.8;
+
 const requestBody = z.object({
   image_url: z.string().url(),
   page_title: z.string().max(280).optional(),
@@ -61,6 +66,11 @@ const classificationResult = z.object({
   classification: z.enum(["makeup", "skincare", "unknown"]),
   slot: z.string().nullable().optional(),
   concerns: z.array(z.string()).optional(),
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .nullable()
+    .optional(),
   reasoning: z.string(),
 });
 
@@ -90,12 +100,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     const classificationPrompt = `Classify this beauty product image as "makeup" or "skincare" (or "unknown" if uncertain).
 ${page_title ? `Page title: ${page_title}\n` : ""}${page_url ? `Page URL: ${page_url}\n` : ""}
-If makeup, pick one slot from: ${VALID_SLOTS.join(", ")}.
+If makeup, pick one slot from: ${VALID_SLOTS.join(", ")}, and estimate the product's dominant color as hex "#RRGGBB" (the pigment color, not the packaging). Return color null if unclear.
 If skincare, pick 1-3 concerns from: ${VALID_CONCERNS.join(", ")}.
 Always include a 1-sentence reasoning.`;
 
-    const classificationStricter = `Return ONLY JSON: {"classification":"makeup"|"skincare"|"unknown","slot"?:string,"concerns"?:string[],"reasoning":string}.
-If classification is "makeup", slot MUST be one of: ${VALID_SLOTS.join(", ")}.
+    const classificationStricter = `Return ONLY JSON: {"classification":"makeup"|"skincare"|"unknown","slot"?:string,"concerns"?:string[],"color"?:string|null,"reasoning":string}.
+If classification is "makeup", slot MUST be one of: ${VALID_SLOTS.join(", ")}, and color is the product pigment hex "#RRGGBB" or null.
 If classification is "skincare", concerns MUST be a subset of: ${VALID_CONCERNS.join(", ")}.
 Image is a product photo${page_title ? ` from page "${page_title}"` : ""}.`;
 
@@ -109,6 +119,7 @@ Image is a product photo${page_title ? ` from page "${page_title}"` : ""}.`;
           classification: { type: "STRING", enum: ["makeup", "skincare", "unknown"] },
           slot: { type: "STRING", nullable: true },
           concerns: { type: "ARRAY", items: { type: "STRING" } },
+          color: { type: "STRING", nullable: true },
           reasoning: { type: "STRING" },
         },
         required: ["classification", "reasoning"],
@@ -153,7 +164,7 @@ Image is a product photo${page_title ? ` from page "${page_title}"` : ""}.`;
 
     try {
       if (classified.classification === "makeup") {
-        const slot = classified.slot && SLOT_TO_EFFECT[classified.slot]
+        const slot = classified.slot && SLOT_TO_LEGACY_EFFECT[classified.slot]
           ? classified.slot
           : null;
         if (!slot) {
@@ -166,24 +177,45 @@ Image is a product photo${page_title ? ` from page "${page_title}"` : ""}.`;
             },
           });
         }
-        const effect = SLOT_TO_EFFECT[slot];
-        resultUrl = await runPerfectCorpTask({
-          featureName: "ai-makeup",
-          bytes: selfieBytes,
-          contentType: selfieMime,
-          fileName: selfieName,
-          taskParams: { params: { effect_list: [{ feature_name: effect }] } },
-        });
+        const effects = buildMakeupEffects(
+          [{ slot, color: classified.color ?? null }],
+          null,
+        );
+        try {
+          resultUrl = await runPerfectCorpTask({
+            featureName: "makeup-vto",
+            bytes: selfieBytes,
+            contentType: selfieMime,
+            fileName: selfieName,
+            taskParams: { version: "1.0", effects },
+          });
+        } catch (vtoErr) {
+          console.warn("makeup-vto failed; falling back to legacy ai-makeup:", vtoErr);
+          resultUrl = await runPerfectCorpTask({
+            featureName: "ai-makeup",
+            bytes: selfieBytes,
+            contentType: selfieMime,
+            fileName: selfieName,
+            taskParams: {
+              params: { effect_list: [{ feature_name: SLOT_TO_LEGACY_EFFECT[slot] }] },
+            },
+          });
+        }
       } else {
         const concerns = (classified.concerns ?? []).filter((concern) =>
           VALID_CONCERNS.includes(concern),
         );
+        const simParams: Record<string, number> = {};
+        for (const concern of concerns) {
+          const param = CONCERN_TO_SIM_PARAM[concern];
+          if (param) simParams[param] = SIM_INTENSITY;
+        }
         resultUrl = await runPerfectCorpTask({
           featureName: "skin-simulation",
           bytes: selfieBytes,
           contentType: selfieMime,
           fileName: selfieName,
-          taskParams: { params: { concerns } },
+          taskParams: simParams,
         });
       }
     } catch (err) {
