@@ -64,6 +64,46 @@ flowchart TB
     NOVUS["Novus.ai analytics<br/>(auto-instrumented)"] -.-> PWA
 ```
 
+## Perfect Corp API coverage
+
+Ten YouCam features, composed — the analyses feed the try-ons: skin tone
+drives VTO colors and shade checks, face attributes pick VTO patterns,
+Fitzpatrick shapes the verdicts.
+
+```mermaid
+flowchart LR
+    subgraph moments [User moment]
+        ADD["📸 Add product"]
+        SCAN["🤳 Skin scan"]
+        VERD["⚖️ Verdict + previews"]
+        LOOK["💄 Build / steal a look"]
+        EXTW["🧩 Extension"]
+    end
+    subgraph pc [Perfect Corp YouCam — 10 features]
+        BGR["Background Removal"]
+        ENH["Photo Enhance"]
+        SKA["Skin Analysis HD"]
+        TONE["Facial Color Tones"]
+        FITZ["Fitzpatrick Skin Type"]
+        FACE["Face Attributes"]
+        SIM["Skin Simulation"]
+        VTO["Makeup VTO"]
+        MUT["Makeup Transfer"]
+        AGE["AI Aging"]
+    end
+    ADD --> BGR
+    ADD -. "shade check reads" .-> TONE
+    SCAN --> ENH
+    ENH --> SKA
+    SCAN --> TONE & FITZ & FACE
+    VERD --> SIM & AGE
+    VERD -. "grading context" .-> FITZ
+    LOOK --> VTO & MUT
+    LOOK -. "palette colors" .-> TONE
+    LOOK -. "contour/brow patterns" .-> FACE
+    EXTW --> VTO & SIM & MUT
+```
+
 ## Tech stack
 
 - **Frontend:** Vite + React 19 + TypeScript (strict), Tailwind v4, React Router v7 (data routes), Zustand for client state, TanStack Query for server state. Extension: Manifest V3 + side panel via `@crxjs/vite-plugin`.
