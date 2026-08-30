@@ -4,6 +4,31 @@ A beauty and skincare collection app: log makeup and skincare products with two 
 
 Built for **Mind the Product — World Product Day: Everyone Ships Now** (Devpost), shipping with [Novus.ai](https://www.novus.ai/) product analytics auto-instrumented from the repo.
 
+## How it flows
+
+```mermaid
+flowchart LR
+    A["📸 Add products<br/>2 photos each"] --> B["🤳 Skin scan<br/>13 metrics + tone,<br/>Fitzpatrick, face attrs"]
+    B --> C["📋 Routine<br/>what you actually use"]
+    C --> D["⚖️ Verdict<br/>works / neutral / skip<br/>per product"]
+    D --> E["✨ 4-week preview<br/>only concerns your<br/>routine covers"]
+    D --> F["💄 Build / steal a look<br/>your products,<br/>your face"]
+    A -. "shade-match check" .-> B
+    E -. "gaps → what to buy next" .-> A
+```
+
+## Screenshots
+
+<!-- Drop PNGs into docs/images/ with these exact names (see docs/images/shot-list.md) and they render here. -->
+
+| Dashboard | Verdict + coverage | Steal a look |
+| --- | --- | --- |
+| ![Dashboard with product stickers](docs/images/dashboard.png) | ![Verdict screen with coverage chips](docs/images/verdict.png) | ![Reference look next to the transfer result](docs/images/steal-look.png) |
+
+| Skin scan | Routines | Extension |
+| --- | --- | --- |
+| ![Scan results with 13 metrics](docs/images/scan.png) | ![Routine editor](docs/images/routines.png) | ![Side panel try-on](docs/images/extension.png) |
+
 ## What it does
 
 - **Add a product in two photos.** Snap the front; Lume removes the background, reads name, brand, subcategory, and shade in parallel. Snap the back; it OCRs the ingredients list. If the box was tossed and OCR comes up empty, Lume searches Open Beauty Facts and falls back to a Gemini grounded web search so you never hand-type 30 ingredients. Adding a foundation or concealer? Lume checks the shade against your analyzed skin tone and warns if it runs warm/cool/light/deep for you.
@@ -13,6 +38,31 @@ Built for **Mind the Product — World Product Day: Everyone Ships Now** (Devpos
 - **Honest skin previews.** "Preview your skin in 4 weeks" simulates only the concerns your works-pile actually targets (Perfect Corp Skin Simulation) and tells you which low-scoring concerns your routine does *not* cover yet. A separate "fast forward" card runs AI Aging — labeled clearly as a generic simulation.
 - **Build or steal a look.** Describe a vibe ("soft glam date night") and Gemini casts your own makeup — real product colors inferred from shade names, contour/brow patterns matched to your analyzed face shape and brow shape, foundation matched to your skin tone — rendered by Perfect Corp Makeup VTO. Or upload any makeup photo and **Makeup Transfer** puts that look on your face, mapped to the products you own plus a list of gaps to shop.
 - **Chrome extension.** Right-click any image on the web: **Try with Lume** renders a product on your selfie (Makeup VTO or Skin Simulation); **Steal this look with Lume** transfers the photographed makeup onto you. Load-unpacked; see `extension/README.md`.
+
+## Architecture
+
+```mermaid
+flowchart TB
+    subgraph clients [Clients]
+        PWA["React PWA<br/>(Vite · React 19 · TS strict)"]
+        EXT["Chrome extension<br/>(MV3 side panel)"]
+    end
+    subgraph supabase [Supabase]
+        AUTH["Auth<br/>magic link + demo login"]
+        DB[("Postgres + RLS")]
+        STO[("Storage<br/>selfies · products · looks")]
+        EF["15 Edge Functions (Deno)<br/>validate → call AI → soft-fail"]
+    end
+    subgraph ai [AI services]
+        PC["Perfect Corp YouCam<br/>10 features, s2s v2 tasks"]
+        GEM["Gemini 2.5 Flash<br/>vision · reasoning · grounded search"]
+        OBF["Open Beauty Facts"]
+    end
+    PWA --> AUTH & DB & STO & EF
+    EXT --> EF
+    EF --> PC & GEM & OBF
+    NOVUS["Novus.ai analytics<br/>(auto-instrumented)"] -.-> PWA
+```
 
 ## Tech stack
 
