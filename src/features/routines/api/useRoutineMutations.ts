@@ -27,7 +27,10 @@ export function useCreateRoutineMutation() {
       if (error) throw error;
       return data as Routine;
     },
-    onSuccess: invalidate,
+    onSuccess: (routine) => {
+      invalidate();
+      pendo.track("routine_created", { routine_name: routine.name });
+    },
   });
 }
 
@@ -41,7 +44,10 @@ export function useDeleteRoutineMutation() {
         .eq("id", routineId);
       if (error) throw error;
     },
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      pendo.track("routine_deleted");
+    },
   });
 }
 
@@ -68,7 +74,12 @@ export function useSetActiveRoutineMutation() {
         if (setErr) throw setErr;
       }
     },
-    onSuccess: invalidate,
+    onSuccess: (_data, { routineId }) => {
+      invalidate();
+      if (routineId) {
+        pendo.track("routine_set_active", { routine_id: routineId });
+      }
+    },
   });
 }
 
