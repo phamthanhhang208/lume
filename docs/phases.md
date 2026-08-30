@@ -152,7 +152,7 @@ eslint (Vite default)
    - Capture or load
    - Trigger analysis (long-running, show progress UI)
    - Save scan, navigate to results
-6. Results screen: 14 metrics, skin age, overall score (unstyled, functional)
+6. Results screen: 13 metrics, skin age, overall score (unstyled, functional)
 7. `useLatestScan` query hook
 
 **Exit criteria:**

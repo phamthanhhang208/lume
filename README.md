@@ -7,7 +7,7 @@ Built for the **DevNetwork AI/ML Hackathon 2026** (Perfect Corp track).
 ## What it does
 
 - **Add a product in two photos.** Snap the front; Lume removes the background, reads name, brand, subcategory, and shade in parallel. Snap the back; it OCRs the ingredients list. If the box was tossed and OCR comes up empty, Lume searches Open Beauty Facts and falls back to a grounded web search so you don't have to hand-type 30 ingredients.
-- **Skin scan.** Take a selfie; Perfect Corp's Skin Analysis returns 14 metrics (wrinkle, pore, acne, redness, moisture, dark circle, firmness, radiance, …). Skin tone and face shape get extracted in the background and saved to your profile.
+- **Skin scan.** Take a selfie; Perfect Corp's Skin Analysis returns 13 metrics (wrinkle, pore, acne, redness, moisture, dark circle, firmness, radiance, …). Skin tone, Fitzpatrick skin type, and face attributes get extracted in the background and saved to your profile.
 - **Per-product verdict.** Gemini cross-references your skin metrics against each product's ingredients and tags every product as **works**, **neutral**, or **skip** with one sentence of reasoning anchored to a specific metric.
 - **Preview your skin in 4 weeks.** From the verdict screen, Lume calls Perfect Corp's Skin Simulation on your top concerns and renders a before/after — a visual of where your routine is taking you.
 - **Build me a look.** Describe a vibe ("soft glam date night"); Gemini picks the right subset of your owned makeup, assigns slots, considers your face shape, then Perfect Corp's Makeup VTO renders it onto your selfie.

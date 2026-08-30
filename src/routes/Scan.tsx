@@ -93,7 +93,7 @@ export default function Scan() {
           <div className="mb-4 rounded-2xl border border-black/[0.08] bg-white px-4 py-5">
             <div className="font-hand text-xl font-semibold text-ink">analyzing your skin…</div>
             <p className="mt-1 font-sans text-xs text-ink-soft">
-              this can take 20–30 seconds. reading 14 metrics.
+              this can take 20–30 seconds. reading 13 metrics.
             </p>
             <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-black/[0.06]">
               <div className="h-full w-2/3 rounded-full bg-sage-deep animate-pulse" />

@@ -49,7 +49,7 @@ A user's skin analysis result at a point in time.
 | id                    | uuid (PK)   | default gen_random_uuid()                                                                                            |
 | user_id               | uuid (FK)   | References `auth.users.id`                                                                                           |
 | image_url             | text        | Path under `selfies` bucket. The selfie analyzed                                                                     |
-| metrics               | jsonb       | Object with 14 skin metrics, each a numeric score                                                                    |
+| metrics               | jsonb       | Object with 13 skin metrics, each a numeric score                                                                    |
 | skin_age              | int         | Result of Perfect Corp Skin Analysis                                                                                 |
 | overall_score         | int         | Aggregate score from API                                                                                             |
 | raw_response          | jsonb       | Full API response, kept for debugging and re-analysis                                                                |
