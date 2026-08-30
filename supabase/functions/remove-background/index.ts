@@ -50,7 +50,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const fileName = storagePath.split("/").pop() ?? "image.jpg";
 
     const resultUrl = await runPerfectCorpTask({
-      featureName: "photo-background-removal",
+      // Perfect Corp's URL slug for AI Photo Background Removal is `sod`
+      // (subject/object detection). The friendly name in the docs doesn't
+      // match the URL slug — only `sod` returns 200 from /s2s/v2.0/file/.
+      featureName: "sod",
       bytes,
       contentType,
       fileName,

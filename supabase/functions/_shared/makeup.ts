@@ -1,7 +1,14 @@
-// Builders for the makeup-vto "effects" payload (version 1.0), verified
-// against the YouCam MCP catalog. Each Lume makeup slot maps to one effect
-// category; pattern names come from the per-category pattern catalogs
-// (blush.json, contour.json, ...) also served by the catalog.
+// Builders for the makeup-vto "effects" payload (version 1.0).
+// Field sets per category were verified against the live API (see
+// generate-look history) and the YouCam MCP catalog:
+//  - colorIntensity is always integer 0-100
+//  - pattern / shape / style are OBJECTS ({ name } / { type }), not strings
+//  - lip_color wants shape {name:"original"} + style {type:"full"} to keep
+//    the natural lip silhouette; eyebrows use pattern {type:"color"} to
+//    tint the user's own brow shape; eyelashes take no texture field
+//
+// Colors: a Gemini-inferred product color wins, then the user's measured
+// skin hex (foundation/concealer only), then a neutral per-slot default.
 //
 // The legacy `ai-makeup` + effect_list dialect is kept as a fallback in the
 // call sites: if the makeup-vto task is rejected, callers retry with legacy.
@@ -12,29 +19,37 @@ export interface MakeupPick {
   color: string | null;
 }
 
-// Neutral defaults so an effect can still render when Gemini returns no
-// color for a pick. Chosen to read as "generic product" rather than a bold
-// statement color.
-const DEFAULT_SLOT_COLORS: Record<string, string> = {
-  foundation: "#E6C4A8",
-  concealer: "#E8CBB0",
-  blush: "#E19F9F",
-  bronzer: "#B5835A",
-  contour: "#A67B5B",
-  highlighter: "#F5E6D3",
-  lipstick: "#B04A5A",
-  "lip liner": "#A05A5A",
-  eyeshadow: "#B08D6E",
-  eyeliner: "#2B1B12",
-  eyelash: "#1A1A1A",
-  eyebrow: "#4A3728",
-};
-
 /** Face attributes that influence pattern selection. */
 export interface MakeupFaceAttrs {
   faceShape: string | null;
-  eyebrowShape: string | null;
 }
+
+/** Pulls the measured skin hex out of profiles.skin_tone_data, if present. */
+export function skinHexFrom(skinToneData: unknown): string | null {
+  if (!skinToneData || typeof skinToneData !== "object") return null;
+  const st = skinToneData as Record<string, unknown>;
+  if (typeof st.hex_color === "string" && st.hex_color.startsWith("#")) {
+    return st.hex_color;
+  }
+  return null;
+}
+
+// Neutral defaults so an effect can still render when Gemini returns no
+// color for a pick.
+const DEFAULT_SLOT_COLORS: Record<string, string> = {
+  foundation: "#E8C5A0",
+  concealer: "#E8C5A0",
+  blush: "#E8919A",
+  bronzer: "#C68642",
+  contour: "#B07850",
+  highlighter: "#FFE5B4",
+  lipstick: "#C44B4B",
+  "lip liner": "#A83030",
+  eyeshadow: "#8B7355",
+  eyeliner: "#2C2C2C",
+  eyelash: "#1A1A1A",
+  eyebrow: "#5C4033",
+};
 
 // Contour/highlighter patterns are named after face shapes in the catalog.
 // Fall back to the oval variants, which suit most faces.
@@ -56,25 +71,19 @@ function highlighterPattern(faceShape: string | null): string {
   }
 }
 
-// Brow catalog labels are style-named (Arrow1, SoftArch1, ...). Match the
-// detected brow shape loosely; SoftArch flatters most faces as the default.
-function eyebrowPattern(browShape: string | null): string {
-  const shape = (browShape ?? "").toLowerCase();
-  if (shape.includes("arch")) return "SoftArch1";
-  if (shape.includes("arrow") || shape.includes("angled")) return "Arrow1";
-  return "SoftArch1";
-}
-
 /**
  * Builds the effects array for a makeup-vto task from slot/color picks.
- * Unknown slots are skipped.
+ * Always includes a light skin-smooth base. Unknown slots are skipped.
  */
 export function buildMakeupEffects(
   picks: MakeupPick[],
   faceAttrs: MakeupFaceAttrs | null,
+  skinHex: string | null = null,
 ): Array<Record<string, unknown>> {
   const faceShape = faceAttrs?.faceShape ?? null;
-  const effects: Array<Record<string, unknown>> = [];
+  const effects: Array<Record<string, unknown>> = [
+    { category: "skin_smooth", skinSmoothStrength: 40, skinSmoothColorIntensity: 30 },
+  ];
   for (const pick of picks) {
     const color = pick.color ?? DEFAULT_SLOT_COLORS[pick.slot];
     if (!color) continue;
@@ -82,46 +91,65 @@ export function buildMakeupEffects(
       case "foundation":
         effects.push({
           category: "foundation",
-          palettes: [{ color, colorIntensity: 60 }],
+          palettes: [{
+            color: pick.color ?? skinHex ?? DEFAULT_SLOT_COLORS.foundation,
+            colorIntensity: 45,
+            coverageIntensity: 50,
+            glowIntensity: 20,
+          }],
         });
         break;
       case "concealer":
         effects.push({
           category: "concealer",
-          palettes: [{ color, colorIntensity: 60 }],
+          palettes: [{
+            color: pick.color ?? skinHex ?? DEFAULT_SLOT_COLORS.concealer,
+            colorIntensity: 45,
+            colorUnderEyeIntensity: 40,
+            coverageLevel: 50,
+          }],
         });
         break;
       case "blush":
         effects.push({
           category: "blush",
           pattern: { name: "1color1" },
-          palettes: [{ color, colorIntensity: 60, texture: "matte" }],
+          palettes: [{ color, colorIntensity: 50, texture: "matte" }],
         });
         break;
       case "bronzer":
         effects.push({
           category: "bronzer",
           pattern: { name: "Bronzer1" },
-          palettes: [{ color, colorIntensity: 50 }],
+          palettes: [{ color, colorIntensity: 40 }],
         });
         break;
       case "contour":
         effects.push({
           category: "contour",
           pattern: { name: contourPattern(faceShape) },
-          palettes: [{ color, colorIntensity: 50 }],
+          palettes: [{ color, colorIntensity: 40 }],
         });
         break;
       case "highlighter":
         effects.push({
           category: "highlighter",
           pattern: { name: highlighterPattern(faceShape) },
-          palettes: [{ color, colorIntensity: 60, glowIntensity: 60 }],
+          palettes: [{
+            color,
+            colorIntensity: 50,
+            glowIntensity: 40,
+            shimmerIntensity: 50,
+            shimmerDensity: 40,
+            shimmerSize: 30,
+          }],
         });
         break;
       case "lipstick":
         effects.push({
           category: "lip_color",
+          shape: { name: "original" },
+          style: { type: "full" },
           palettes: [{ color, colorIntensity: 80, texture: "matte" }],
         });
         break;
@@ -129,7 +157,13 @@ export function buildMakeupEffects(
         effects.push({
           category: "lip_liner",
           pattern: { name: "Natural1" },
-          palettes: [{ color, colorIntensity: 70 }],
+          palettes: [{
+            color,
+            colorIntensity: 70,
+            texture: "matte",
+            thickness: 30,
+            smoothness: 60,
+          }],
         });
         break;
       case "eyeshadow":
@@ -140,32 +174,24 @@ export function buildMakeupEffects(
         });
         break;
       case "eyeliner":
-        // The eyeliner catalog starts at 2-color patterns; send the same
-        // color twice so a single product still renders.
         effects.push({
           category: "eye_liner",
-          pattern: { name: "2colors1" },
-          palettes: [
-            { color, colorIntensity: 70 },
-            { color, colorIntensity: 70 },
-          ],
+          pattern: { name: "Arabic3" },
+          palettes: [{ color, colorIntensity: 80, texture: "matte" }],
         });
         break;
       case "eyelash":
         effects.push({
           category: "eyelashes",
           pattern: { name: "Upper1" },
-          palettes: [{ color, colorIntensity: 70 }],
+          palettes: [{ color, colorIntensity: 90 }],
         });
         break;
       case "eyebrow":
         effects.push({
           category: "eyebrows",
-          pattern: {
-            type: "shape",
-            name: eyebrowPattern(faceAttrs?.eyebrowShape ?? null),
-          },
-          palettes: [{ color, colorIntensity: 60 }],
+          pattern: { type: "color" },
+          palettes: [{ color, colorIntensity: 60, texture: "matte" }],
         });
         break;
     }

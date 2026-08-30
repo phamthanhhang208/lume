@@ -128,6 +128,18 @@ export function useProcessFrontPhotoMutation() {
         runFrontInfoExtract(original.storagePath, input.category),
       ]);
 
+      console.log("[process-front-photo]", {
+        backgroundRemoval: bg.fellBack ? "fell back to original" : "ok",
+        extract: extracted.fellBack
+          ? "failed (will leave fields empty)"
+          : {
+              name: extracted.name,
+              brand: extracted.brand,
+              subcategory: extracted.subcategory,
+              shade: extracted.shade,
+            },
+      });
+
       return {
         originalStoragePath: original.storagePath,
         stickerStoragePath: bg.stickerStoragePath,

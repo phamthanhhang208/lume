@@ -64,8 +64,57 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="mx-4 mb-4 mt-2">
-          <SkinCheckCard scan={latestScan.data} />
+        <div className="mx-4 mb-4 mt-2 flex gap-2">
+          {(
+            [
+              {
+                label: "skin age",
+                val: latestScan.data ? String(latestScan.data.skin_age) : "—",
+                sub: latestScan.data ? "↓ trending" : "no scan",
+                color: "#7CB89C",
+              },
+              {
+                label: "overall",
+                val: latestScan.data
+                  ? String(latestScan.data.overall_score)
+                  : "—",
+                sub: latestScan.data ? "score" : "no scan",
+                color: "#7CB89C",
+              },
+              {
+                label: "works",
+                val:
+                  totalVerdicts > 0
+                    ? `${verdictCounts.works}/${totalVerdicts}`
+                    : "—",
+                sub: totalVerdicts > 0 ? "products" : "no verdict",
+                color: "#1A1A1A",
+              },
+            ] as { label: string; val: string; sub: string; color: string }[]
+          ).map((c, i) => (
+            <div
+              key={c.label}
+              className="flex-1 rounded-2xl border border-black/[0.10] bg-white px-3 py-2.5"
+              style={{
+                boxShadow:
+                  "0 1px 3px rgba(20,18,14,.06), 0 4px 14px rgba(20,18,14,.05)",
+                transform: `rotate(${(i - 1) * 0.4}deg)`,
+              }}
+            >
+              <div className="font-mono text-[8.5px] uppercase tracking-[0.08em] text-ink-soft">
+                {c.label}
+              </div>
+              <div className="font-hand text-[26px] font-bold leading-none text-ink">
+                {c.val}
+              </div>
+              <div
+                className="mt-0.5 font-mono text-[8.5px] font-bold"
+                style={{ color: c.color }}
+              >
+                {c.sub}
+              </div>
+            </div>
+          ))}
         </div>
 
         {!canAnalyze && (
@@ -155,29 +204,6 @@ export default function Dashboard() {
             ))}
             <AddSlot />
           </div>
-        )}
-
-        {hasProducts && (
-          <Link
-            to="/look"
-            className="mx-4 mt-4 flex items-center justify-between rounded-2xl p-4"
-            style={{
-              background: "#3D2F26",
-              color: "#F4EDE0",
-              boxShadow: "0 4px 14px rgba(20,18,14,.16)",
-              transform: "rotate(-0.6deg)",
-            }}
-          >
-            <div>
-              <div className="font-hand text-2xl font-semibold leading-none">
-                build me a look
-              </div>
-              <div className="mt-1 font-sans text-[11px] opacity-70">
-                ai · uses what you already own
-              </div>
-            </div>
-            <SparkleIcon />
-          </Link>
         )}
 
         <BottomNav />
@@ -546,49 +572,6 @@ export default function Dashboard() {
 }
 
 // ─── Shared sub-components ───
-
-function SkinCheckCard({ scan }: { scan: { skin_age: number; created_at: string } | null | undefined }) {
-  return (
-    <Link
-      to="/scan"
-      className="flex items-center gap-3 rounded-2xl border border-black/[0.08] bg-white p-3.5"
-      style={{
-        boxShadow: "0 1px 3px rgba(20,18,14,.08), 0 4px 14px rgba(20,18,14,.06)",
-      }}
-    >
-      <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-rose">
-        <svg
-          width="24"
-          height="24"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="#E37B8C"
-          strokeWidth="1.4"
-          strokeLinecap="round"
-        >
-          <circle cx="12" cy="8" r="4" />
-          <path d="M4 21c1-5 6-7 8-7s7 2 8 7" />
-        </svg>
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="font-hand text-xl font-semibold leading-none text-ink">
-          Skin check
-        </div>
-        <div className="mt-0.5 font-sans text-[11.5px] text-ink-soft">
-          {scan
-            ? `last scan · ${new Date(scan.created_at).toLocaleDateString()}`
-            : "no scan yet · start one"}
-        </div>
-      </div>
-      <div
-        className="rounded-full px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.08em] text-white"
-        style={{ background: "#7CB89C" }}
-      >
-        {scan ? "rescan" : "scan"}
-      </div>
-    </Link>
-  );
-}
 
 interface ProductCardProps {
   product: Product;

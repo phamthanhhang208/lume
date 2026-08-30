@@ -26,6 +26,7 @@ import { errorResponse, jsonResponse, preflight } from "../_shared/cors.ts";
 import { callGeminiJson } from "../_shared/gemini.ts";
 import {
   buildMakeupEffects,
+  skinHexFrom,
   SLOT_TO_LEGACY_EFFECT,
   VALID_MAKEUP_SLOTS,
 } from "../_shared/makeup.ts";
@@ -126,24 +127,29 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     if (picks.length > 0) {
       try {
-        const { data: selfie, error: dlErr } = await supabase.storage
+        // Use Supabase Image Transform to resize to ≤ 1920×1920 on download
+        // (PC makeup-vto rejects images larger than 1920×1920px).
+        const { data: urlData, error: urlErr } = await supabase.storage
           .from("selfies")
-          .download(profile.saved_selfie_url);
-        if (dlErr || !selfie) throw dlErr ?? new Error("no selfie blob");
-        const bytes = new Uint8Array(await selfie.arrayBuffer());
-        const contentType = selfie.type || "image/jpeg";
-        const fileName = profile.saved_selfie_url.split("/").pop() ?? "selfie.jpg";
+          .createSignedUrl(profile.saved_selfie_url, 120, {
+            transform: { width: 1920, height: 1920, resize: "contain" },
+          });
+        if (urlErr || !urlData?.signedUrl) {
+          throw urlErr ?? new Error("failed to create signed url for selfie");
+        }
+        const selfieRes = await fetch(urlData.signedUrl);
+        if (!selfieRes.ok) throw new Error(`selfie download ${selfieRes.status}`);
+        const bytes = new Uint8Array(await selfieRes.arrayBuffer());
+        const contentType = "image/jpeg";
+        const fileName = "selfie.jpg";
 
         // Primary: makeup-vto with the color-aware effects dialect.
-        // Fallback: legacy ai-makeup effect_list if the new payload is
-        // rejected (only the file upload is repeated; failed creates cost
-        // no task units).
+        // Fallback: legacy ai-makeup effect_list if the payload is rejected
+        // (only the file upload is repeated; failed creates cost no units).
         const effects = buildMakeupEffects(
           picks.map((pick) => ({ slot: pick.slot, color: pick.color ?? null })),
-          {
-            faceShape: faceAttrs?.face_shape ?? null,
-            eyebrowShape: faceAttrs?.eyebrow_shape ?? null,
-          },
+          { faceShape: faceAttrs?.face_shape ?? null },
+          skinHexFrom(profile.skin_tone_data),
         );
         let resultUrl: string;
         try {

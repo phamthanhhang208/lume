@@ -1,10 +1,17 @@
+import { useState } from "react";
+import { Link } from "react-router";
+
 import BottomNav from "@/components/ui/BottomNav";
 import { useAuth } from "@/features/auth/api/useAuth";
 import { useSignOutMutation } from "@/features/auth/api/useSignOutMutation";
+import { useLatestScan } from "@/features/scans/api/useLatestScan";
+import ScanResults from "@/features/scans/components/ScanResults";
 
 export default function Profile() {
   const { user } = useAuth();
   const signOut = useSignOutMutation();
+  const latestScan = useLatestScan();
+  const [reportOpen, setReportOpen] = useState(false);
 
   const settings = [
     { label: "magic link sign-in", right: user?.email ?? "—" },
@@ -60,6 +67,78 @@ export default function Profile() {
               {user?.email}
             </div>
           </div>
+        </div>
+
+        {/* Skin report card */}
+        <div
+          className="mb-4 overflow-hidden rounded-2xl border border-black/[0.10] bg-white"
+          style={{ boxShadow: "0 1px 3px rgba(20,18,14,.06), 0 4px 14px rgba(20,18,14,.06)" }}
+        >
+          {/* Summary row — always visible */}
+          <div className="flex items-center gap-3 px-4 py-3.5">
+            <div
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+              style={{ background: "#C5DDC9" }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4A8C6A" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 3c2 4 4 6 4 9a4 4 0 0 1-8 0c0-3 2-5 4-9z" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-mono text-[9px] uppercase tracking-[0.08em] text-ink-soft">
+                skin analysis
+              </div>
+              {latestScan.data ? (
+                <div className="font-hand text-xl font-semibold leading-tight text-ink">
+                  skin age {latestScan.data.skin_age}
+                  <span className="ml-2 font-mono text-[10px] font-normal text-ink-soft">
+                    · overall {latestScan.data.overall_score}
+                  </span>
+                </div>
+              ) : (
+                <div className="font-hand text-xl font-semibold leading-tight text-ink">
+                  no scan yet
+                </div>
+              )}
+            </div>
+            {/* Rescan link */}
+            <Link
+              to="/scan"
+              className="shrink-0 rounded-full px-3 py-1.5 font-mono text-[9px] font-bold uppercase tracking-[0.08em] text-white"
+              style={{ background: "#7CB89C" }}
+            >
+              {latestScan.data ? "rescan" : "scan"}
+            </Link>
+          </div>
+
+          {/* View full report toggle */}
+          {latestScan.data && (
+            <>
+              <button
+                type="button"
+                onClick={() => setReportOpen((v) => !v)}
+                className="flex w-full items-center justify-between border-t border-black/[0.07] px-4 py-3"
+              >
+                <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-soft">
+                  {reportOpen ? "hide report" : "view full report"}
+                </span>
+                <svg
+                  width="12" height="12" viewBox="0 0 12 12" fill="none"
+                  stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+                  className="shrink-0 text-ink-faint transition-transform"
+                  style={{ transform: reportOpen ? "rotate(180deg)" : "rotate(0deg)" }}
+                >
+                  <path d="M2 4l4 4 4-4" />
+                </svg>
+              </button>
+
+              {reportOpen && (
+                <div className="border-t border-black/[0.07] px-4 pb-4 pt-3">
+                  <ScanResults scan={latestScan.data} />
+                </div>
+              )}
+            </>
+          )}
         </div>
 
         {/* Settings list */}

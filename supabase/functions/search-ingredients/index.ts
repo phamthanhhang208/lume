@@ -14,7 +14,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 import { errorResponse, jsonResponse, preflight } from "../_shared/cors.ts";
-import { callGeminiGrounded } from "../_shared/gemini.ts";
+import { callGeminiGrounded, callGeminiJson } from "../_shared/gemini.ts";
 import {
   ingredientSearchPrompt,
   ingredientSearchPromptStricter,
@@ -43,40 +43,68 @@ interface OBFMatch {
   match_name: string;
 }
 
+/** Try multiple delimiters to parse an OBF ingredients_text blob. */
+function parseOBFIngredients(text: string): string[] {
+  const strategies = [
+    // Standard INCI: comma or semicolon separated
+    () => text.split(/[,;]/).map((s) => s.trim()).filter((s) => s.length > 0 && s.length < 200),
+    // Newline separated (some OBF entries)
+    () => text.split(/\r?\n/).map((s) => s.trim()).filter((s) => s.length > 0 && s.length < 200),
+    // Bullet / middle-dot / dash separated
+    () => text.split(/[·•\-]/).map((s) => s.trim()).filter((s) => s.length > 0 && s.length < 200),
+  ];
+  for (const strategy of strategies) {
+    const result = strategy();
+    if (result.length > 1) return result;
+  }
+  // Last resort: treat the whole text as a single entry so we don't return empty
+  const trimmed = text.trim();
+  return trimmed.length > 0 ? [trimmed.slice(0, 300)] : [];
+}
+
 async function tryOpenBeautyFacts(
   name: string,
   brand: string | null,
 ): Promise<OBFMatch | null> {
+  // openbeautyfacts.org is already cosmetics-only — no need for categories_tags
+  // which filters out most products because they're tagged with specific tags
+  // (en:lipsticks, en:foundations, …) not the generic "cosmetics".
   const terms = brand ? `${name} ${brand}` : name;
   const url =
-    `https://world.openbeautyfacts.org/api/v2/search?categories_tags=cosmetics&search_terms=${
+    `https://world.openbeautyfacts.org/api/v2/search?search_terms=${
       encodeURIComponent(terms)
     }&fields=product_name,brands,ingredients_text,url,code&page_size=5`;
 
+  console.log("[OBF] searching:", terms);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000);
+  const timeout = setTimeout(() => controller.abort(), 6000);
   try {
     const res = await fetch(url, {
       headers: { "User-Agent": "lume/1.0 (hackathon@lume.app)" },
       signal: controller.signal,
     });
     if (!res.ok) {
-      console.warn("OBF non-ok:", res.status, await res.text().catch(() => ""));
+      console.warn("[OBF] non-ok response:", res.status, await res.text().catch(() => ""));
       return null;
     }
     const data = (await res.json()) as OBFResponse;
+    console.log("[OBF] total products returned:", data.products?.length ?? 0);
+
     const candidates = (data.products ?? []).filter(
       (p) =>
         typeof p.ingredients_text === "string" &&
         p.ingredients_text.length >= 30,
     );
+    console.log("[OBF] candidates with ingredients:", candidates.length);
+
+    // Return null ONLY when there are zero candidates — once we have a candidate
+    // we commit to it and never fall through to Gemini.
     if (candidates.length === 0) return null;
+
     const pick = candidates[0];
-    const ingredients = pick
-      .ingredients_text!.split(/[,;]/)
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0 && s.length < 120);
-    if (ingredients.length === 0) return null;
+    const ingredients = parseOBFIngredients(pick.ingredients_text!);
+    console.log("[OBF] matched:", pick.product_name, "ingredients:", ingredients.length);
+
     return {
       ingredients,
       source_url:
@@ -87,7 +115,7 @@ async function tryOpenBeautyFacts(
       match_name: pick.product_name ?? name,
     };
   } catch (err) {
-    console.warn("OBF lookup failed:", err);
+    console.warn("[OBF] lookup failed:", err);
     return null;
   } finally {
     clearTimeout(timeout);
@@ -113,6 +141,62 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
     const { name, brand } = parsed.data;
 
+    // 1. Try Gemini first (grounded Google Search → structured-output fallback).
+    let gemIngredients: string[] = [];
+    let gemSourceUrl: string | null = null;
+
+    try {
+      console.log("[Gemini] trying grounded search…");
+      const gem = await callGeminiGrounded({
+        prompt: ingredientSearchPrompt(name, brand),
+        retryPrompt: ingredientSearchPromptStricter(name, brand),
+        validator: ingredientSearchResult,
+      });
+      gemIngredients = gem.value.ingredients
+        .map((s: string) => s.trim())
+        .filter((s: string) => s.length > 0 && s.length < 200);
+      gemSourceUrl = gem.value.source_url ?? gem.fallbackSource;
+      console.log("[Gemini] grounded OK, ingredients:", gemIngredients.length, "sourceUrl:", gemSourceUrl);
+    } catch (groundedErr) {
+      console.warn("[Gemini] grounded search failed, trying structured-output fallback:", groundedErr);
+      try {
+        const geminiSchema = {
+          type: "OBJECT" as const,
+          properties: {
+            ingredients: { type: "ARRAY" as const, items: { type: "STRING" as const } },
+            source_url: { type: "STRING" as const, nullable: true },
+          },
+          required: ["ingredients", "source_url"],
+        };
+        const fallback = await callGeminiJson({
+          prompt: ingredientSearchPrompt(name, brand),
+          retryPrompt: ingredientSearchPromptStricter(name, brand),
+          geminiSchema,
+          validator: ingredientSearchResult,
+        });
+        gemIngredients = fallback.ingredients
+          .map((s: string) => s.trim())
+          .filter((s: string) => s.length > 0 && s.length < 200);
+        gemSourceUrl = fallback.source_url;
+        console.log("[Gemini] structured fallback OK, ingredients:", gemIngredients.length);
+      } catch (fallbackErr) {
+        console.warn("[Gemini] structured fallback also failed:", fallbackErr);
+      }
+    }
+
+    if (gemIngredients.length > 0) {
+      return jsonResponse({
+        data: {
+          ingredients: gemIngredients,
+          source: "gemini" as const,
+          source_url: gemSourceUrl,
+          match_name: name,
+        },
+      });
+    }
+
+    // 2. Gemini returned nothing — fall back to OBF.
+    console.log("[OBF] Gemini empty, trying Open Beauty Facts…");
     const obf = await tryOpenBeautyFacts(name, brand);
     if (obf) {
       return jsonResponse({
@@ -125,34 +209,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
       });
     }
 
-    try {
-      const gem = await callGeminiGrounded({
-        prompt: ingredientSearchPrompt(name, brand),
-        retryPrompt: ingredientSearchPromptStricter(name, brand),
-        validator: ingredientSearchResult,
-      });
-      const cleaned = gem.value.ingredients
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0 && s.length < 120);
-      return jsonResponse({
-        data: {
-          ingredients: cleaned,
-          source: "gemini" as const,
-          source_url: gem.value.source_url ?? gem.fallbackSource,
-          match_name: cleaned.length > 0 ? name : null,
-        },
-      });
-    } catch (err) {
-      console.warn("Gemini grounded search failed (soft-fail):", err);
-      return jsonResponse({
-        data: {
-          ingredients: [],
-          source: "gemini" as const,
-          source_url: null,
-          match_name: null,
-        },
-      });
-    }
+    // Both came back empty — soft-fail so the user can type manually.
+    console.warn("[search-ingredients] both Gemini and OBF returned empty for:", name, brand);
+    return jsonResponse({
+      data: {
+        ingredients: [],
+        source: "gemini" as const,
+        source_url: null,
+        match_name: null,
+      },
+    });
   } catch (err) {
     console.error("search-ingredients error:", err);
     const message = err instanceof Error ? err.message : String(err);

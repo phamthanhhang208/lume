@@ -21,24 +21,41 @@ interface FileRequest {
   headers?: Record<string, string>;
 }
 
+interface RegisterPayload {
+  files: Array<{
+    file_id: string;
+    requests: FileRequest[];
+  }>;
+}
+
 interface RegisterResponse {
-  result?: {
-    files: Array<{
-      file_id: string;
-      requests: FileRequest[];
-    }>;
-  };
+  result?: RegisterPayload;
+  data?: RegisterPayload;
+}
+
+interface TaskCreatePayload {
+  task_id: string;
 }
 
 interface TaskCreateResponse {
-  result?: { task_id: string };
+  result?: TaskCreatePayload;
+  data?: TaskCreatePayload;
+}
+
+// PC v2.0 returns `results` as a single object; v1.0 (and some endpoints)
+// return an array. We accept both shapes.
+type PollResultEntry = { url?: string; data?: { url?: string } };
+
+interface PollPayload {
+  // v2.0 uses `task_status`; older docs and v1.0 use `status`. Accept either.
+  task_status?: string;
+  status?: string;
+  results?: PollResultEntry | PollResultEntry[];
 }
 
 interface PollResponse {
-  result?: {
-    status?: string;
-    results?: Array<{ url?: string; data?: { url?: string } }>;
-  };
+  result?: PollPayload;
+  data?: PollPayload;
   status?: string;
 }
 
@@ -83,7 +100,8 @@ async function registerAndUpload(
   }
   const regJson = (await regRes.json()) as RegisterResponse;
   console.log("pc register:", JSON.stringify(regJson));
-  const entries = regJson.result?.files ?? [];
+  const regPayload = regJson.data ?? regJson.result;
+  const entries = regPayload?.files ?? [];
   if (entries.length !== files.length) {
     throw new Error(`unexpected register response: ${JSON.stringify(regJson)}`);
   }
@@ -135,7 +153,7 @@ export async function runPerfectCorpTaskAll(opts: RunTaskOptions): Promise<strin
   }
   const taskJson = (await taskRes.json()) as TaskCreateResponse;
   console.log("pc task create:", JSON.stringify(taskJson));
-  const taskId = taskJson.result?.task_id;
+  const taskId = (taskJson.data ?? taskJson.result)?.task_id;
   if (!taskId) throw new Error(`no task_id in response: ${JSON.stringify(taskJson)}`);
 
   // 4. Poll. Backoff per docs/api-integration.md: 1s, 2s, 3s, 5s, 5s... up to ~60s.
@@ -150,9 +168,13 @@ export async function runPerfectCorpTaskAll(opts: RunTaskOptions): Promise<strin
     const pJson = (await pRes.json()) as PollResponse;
     last = pJson;
     console.log(`pc poll ${i + 1}:`, JSON.stringify(pJson));
-    const status = pJson.result?.status ?? pJson.status;
+    const pollPayload = pJson.data ?? pJson.result;
+    const status =
+      pollPayload?.task_status ?? pollPayload?.status ?? pJson.status;
     if (status === "success") {
-      const urls = (pJson.result?.results ?? [])
+      const results = pollPayload?.results;
+      const list = Array.isArray(results) ? results : results ? [results] : [];
+      const urls = list
         .map((r) => r.url ?? r.data?.url)
         .filter((u): u is string => typeof u === "string" && u.length > 0);
       if (urls.length === 0) {

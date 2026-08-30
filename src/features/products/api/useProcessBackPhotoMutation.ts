@@ -38,9 +38,14 @@ export function useProcessBackPhotoMutation() {
         );
         if (error) throw error;
         if (data?.error) throw new Error(`${data.error.code}: ${data.error.message}`);
+        const ingredients = data?.data?.ingredients ?? [];
+        console.log("[process-back-photo]", {
+          ingredientsFound: ingredients.length,
+          ingredients,
+        });
         return {
           backStoragePath: back.storagePath,
-          ingredients: data?.data?.ingredients ?? [],
+          ingredients,
           ocrFellBack: false,
         };
       } catch (err) {

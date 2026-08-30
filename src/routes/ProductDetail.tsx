@@ -6,6 +6,7 @@ import { useAuth } from "@/features/auth/api/useAuth";
 import IngredientList from "@/features/products/components/IngredientList";
 import { useDeleteProductMutation } from "@/features/products/api/useDeleteProductMutation";
 import { useProduct } from "@/features/products/api/useProduct";
+import { useSearchIngredientsMutation } from "@/features/products/api/useSearchIngredientsMutation";
 import { useStickerUrls } from "@/features/products/api/useStickerUrls";
 import { useUpdateProductMutation } from "@/features/products/api/useUpdateProductMutation";
 import { subcategoriesFor } from "@/features/products/utils/subcategories";
@@ -22,12 +23,16 @@ export default function ProductDetail() {
   const updateProduct = useUpdateProductMutation();
   const deleteProduct = useDeleteProductMutation();
 
+  const searchIngredients = useSearchIngredientsMutation();
+
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState("");
   const [brand, setBrand] = useState("");
   const [subcategory, setSubcategory] = useState("");
   const [shade, setShade] = useState("");
   const [ingredients, setIngredients] = useState<string[]>([]);
+  const [ingredientSource, setIngredientSource] = useState<string | null>(null);
+  const [ingredientSourceUrl, setIngredientSourceUrl] = useState<string | null>(null);
 
   const startEdit = () => {
     if (!product.data) return;
@@ -36,12 +41,40 @@ export default function ProductDetail() {
     setSubcategory(product.data.subcategory ?? "");
     setShade(product.data.shade ?? "");
     setIngredients(product.data.ingredients);
+    setIngredientSource(null);
+    setIngredientSourceUrl(null);
     setIsEditing(true);
   };
 
   const cancelEdit = () => {
     setIsEditing(false);
     updateProduct.reset();
+    searchIngredients.reset();
+    setIngredientSource(null);
+    setIngredientSourceUrl(null);
+  };
+
+  const runIngredientSearch = () => {
+    const trimmedName = name.trim();
+    if (!trimmedName) return;
+    searchIngredients.mutate(
+      { name: trimmedName, brand: brand.trim() || null },
+      {
+        onSuccess: (result) => {
+          if (result.ingredients.length === 0) return;
+          if (
+            ingredients.length > 0 &&
+            !window.confirm(
+              "Replace the current ingredients with online results?",
+            )
+          )
+            return;
+          setIngredients(result.ingredients);
+          setIngredientSource(result.source);
+          setIngredientSourceUrl(result.sourceUrl);
+        },
+      },
+    );
   };
 
   const saveEdit = () => {
@@ -75,7 +108,7 @@ export default function ProductDetail() {
     );
   };
 
-  const busy = updateProduct.isPending || deleteProduct.isPending;
+  const busy = updateProduct.isPending || deleteProduct.isPending || searchIngredients.isPending;
   const subcategoryOptions = product.data
     ? subcategoriesFor(product.data.category)
     : [];
@@ -269,15 +302,69 @@ export default function ProductDetail() {
             <div className="rounded-2xl border border-black/[0.10] bg-white p-4">
               <div className="mb-3 flex items-baseline justify-between">
                 <h2 className="font-mono text-[9.5px] uppercase tracking-[0.1em] text-ink-soft">
-                  ingredients · {ingredients.length}
+                  ingredients · {isEditing ? ingredients.length : product.data.ingredients.length}
                 </h2>
               </div>
               {isEditing ? (
-                <IngredientList
-                  ingredients={ingredients}
-                  onChange={setIngredients}
-                  disabled={busy}
-                />
+                <>
+                  <IngredientList
+                    ingredients={ingredients}
+                    onChange={setIngredients}
+                    disabled={updateProduct.isPending}
+                  />
+                  {searchIngredients.isPending && (
+                    <p
+                      className="mt-3 flex items-center gap-2 font-sans text-xs text-ink-soft"
+                      aria-busy="true"
+                    >
+                      <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-terracotta-deep" />
+                      searching online for ingredients…
+                    </p>
+                  )}
+                  {!searchIngredients.isPending && name.trim() && (
+                    <button
+                      type="button"
+                      onClick={runIngredientSearch}
+                      disabled={updateProduct.isPending}
+                      className="mt-3 rounded-full border border-black/25 bg-transparent px-4 py-2 font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-ink disabled:opacity-40"
+                    >
+                      search online
+                    </button>
+                  )}
+                  {ingredientSource &&
+                    (ingredientSource === "openbeautyfacts" ||
+                      ingredientSource === "gemini") &&
+                    ingredients.length > 0 && (
+                      <p className="mt-3 font-mono text-[10px] leading-relaxed text-ink-faint">
+                        source:{" "}
+                        {ingredientSource === "openbeautyfacts"
+                          ? "openbeautyfacts.org"
+                          : "web search"}
+                        {ingredientSourceUrl && (
+                          <>
+                            {" · "}
+                            <a
+                              href={ingredientSourceUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="underline decoration-ink-faint underline-offset-2"
+                            >
+                              verify
+                            </a>
+                          </>
+                        )}
+                        {ingredientSource === "gemini" && (
+                          <> · verify against your product — web sources can be outdated</>
+                        )}
+                      </p>
+                    )}
+                  {searchIngredients.isSuccess &&
+                    searchIngredients.data.ingredients.length === 0 && (
+                      <p className="mt-3 font-mono text-[10px] text-ink-faint">
+                        no results found online — add ingredients manually above.
+                      </p>
+                    )}
+                </>
               ) : product.data.ingredients.length === 0 ? (
                 <p className="font-sans text-xs text-ink-soft">no ingredients listed.</p>
               ) : (
