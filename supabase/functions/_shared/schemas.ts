@@ -83,6 +83,18 @@ export const shadeCheck = z.object({
 });
 export type ShadeCheck = z.infer<typeof shadeCheck>;
 
+export const clashCheck = z.object({
+  clashes: z.array(
+    z.object({
+      with_product: z.string(),
+      pair: z.string(),
+      severity: z.enum(["info", "caution", "avoid"]),
+      note: z.string(),
+    }),
+  ),
+});
+export type ClashCheck = z.infer<typeof clashCheck>;
+
 export const routineCoverage = z.object({
   covered: z.array(z.string()),
   reasoning: z.string(),

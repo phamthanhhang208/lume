@@ -70,7 +70,7 @@ case "$NAME" in
     MODULES=(cors.ts supabase.ts perfectcorp.ts schemas.ts)
     ;;
   try-from-web)
-    MODULES=(cors.ts supabase.ts image.ts gemini.ts makeup.ts perfectcorp.ts)
+    MODULES=(cors.ts supabase.ts image.ts gemini.ts makeup.ts perfectcorp.ts prompts.ts schemas.ts)
     ;;
   *)
     echo "error: unknown function '$NAME' — add its modules to this script" >&2

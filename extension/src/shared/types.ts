@@ -1,10 +1,24 @@
 export type Classification = "makeup" | "skincare" | "unknown";
 
+export interface Clash {
+  with_product: string;
+  pair: string;
+  severity: "info" | "caution" | "avoid";
+  note: string;
+}
+
 export interface TryFromWebResult {
   classification: Classification;
   slot?: string | null;
   concerns?: string[];
+  color?: string | null;
+  product_name?: string | null;
   result_image_url: string | null;
+  selfie_signed_url?: string | null;
+  personalized?: boolean;
+  concerns_matched?: string[];
+  concerns_not_needed?: string[];
+  clashes?: Clash[];
   reasoning: string;
 }
 

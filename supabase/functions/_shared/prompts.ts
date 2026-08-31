@@ -178,6 +178,67 @@ PRODUCTS:
 ${formatProducts(products)}`;
 }
 
+export interface ClashWebProduct {
+  name: string | null;
+  actives: string[];
+  concerns: string[];
+}
+
+export interface ClashRoutineProduct {
+  name: string;
+  brand: string | null;
+  ingredients: string[];
+}
+
+function formatRoutineForClash(products: ClashRoutineProduct[]): string {
+  return products
+    .map((p) => {
+      const label = p.brand ? `${p.brand} ${p.name}` : p.name;
+      const ing =
+        p.ingredients.length > 0
+          ? p.ingredients.slice(0, 25).join(", ")
+          : "(no ingredients listed)";
+      return `- ${label}\n  ingredients: ${ing}`;
+    })
+    .join("\n");
+}
+
+export function clashPrompt(
+  webProduct: ClashWebProduct,
+  routine: ClashRoutineProduct[],
+): string {
+  return `You are a skincare formulation expert. The user is looking at a product online and you must flag real ingredient interactions with the routine they already use.
+
+PRODUCT BEING VIEWED:
+- name: ${webProduct.name ?? "(unknown)"}
+- likely key actives: ${webProduct.actives.length ? webProduct.actives.join(", ") : "(unknown)"}
+- targets: ${webProduct.concerns.join(", ") || "(unknown)"}
+
+THEIR CURRENT ROUTINE:
+${formatRoutineForClash(routine)}
+
+Return a JSON object:
+- clashes: array of {"with_product": <routine product name>, "pair": <"active A × active B">, "severity": "info"|"caution"|"avoid", "note": <one short actionable sentence, e.g. "alternate nights">}
+
+Rules:
+- Flag ONLY interactions with real dermatological basis: retinoid × AHA/BHA (caution), retinoid × benzoyl peroxide (avoid unless formulated together), AHA/BHA × vitamin C L-ascorbic (caution, pH), benzoyl peroxide × vitamin C (caution), multiple strong exfoliants stacking (caution).
+- The same gentle active appearing in two products (niacinamide, hyaluronic acid, panthenol, ceramides...) is NOT a clash — never flag it. Duplicate strong exfoliants or retinoids ARE worth a caution.
+- Niacinamide × vitamin C is fine — at most "info".
+- Do not invent actives that are not plausibly in these products.
+- An empty array is the correct answer when nothing clashes.`;
+}
+
+export function clashPromptStricter(
+  webProduct: ClashWebProduct,
+  routine: ClashRoutineProduct[],
+): string {
+  return `Return ONLY JSON: {"clashes":[{"with_product":string,"pair":string,"severity":"info"|"caution"|"avoid","note":string}]}. Empty array if no real interaction.
+
+Product viewed: ${webProduct.name ?? "unknown"} (actives: ${webProduct.actives.join(", ") || "unknown"}).
+Routine:
+${formatRoutineForClash(routine)}`;
+}
+
 export function shadeCheckPrompt(
   name: string,
   brand: string | null,

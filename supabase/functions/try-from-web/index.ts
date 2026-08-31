@@ -27,6 +27,12 @@ import {
   VALID_MAKEUP_SLOTS,
 } from "../_shared/makeup.ts";
 import { runPerfectCorpTask } from "../_shared/perfectcorp.ts";
+import {
+  clashPrompt,
+  clashPromptStricter,
+  type ClashRoutineProduct,
+} from "../_shared/prompts.ts";
+import { clashCheck, type ClashCheck } from "../_shared/schemas.ts";
 import { requireUser } from "../_shared/supabase.ts";
 
 const VALID_SLOTS = VALID_MAKEUP_SLOTS;
@@ -43,9 +49,13 @@ const VALID_CONCERNS = [
   "firmness",
 ];
 
-// Skin Simulation takes top-level float params (0-1, 1 = most improved).
-// Concerns without a corresponding param (oiliness/moisture/firmness) are
-// classified but not simulated.
+// Skin Simulation takes top-level float params (0-1, 1 = most improved) and
+// wants all 10 keys present. Concerns without a corresponding param
+// (oiliness/moisture/firmness) are classified but not simulated.
+const PC_SIM_KEYS = [
+  "wrinkle", "radiance", "oiliness", "acne", "eye_bags",
+  "dark_circle", "spots", "pores", "texture", "redness",
+] as const;
 const CONCERN_TO_SIM_PARAM: Record<string, string> = {
   acne: "acne",
   wrinkle: "wrinkle",
@@ -55,7 +65,24 @@ const CONCERN_TO_SIM_PARAM: Record<string, string> = {
   dark_circle: "dark_circle",
   texture: "texture",
 };
-const SIM_INTENSITY = 0.8;
+// Classification concern → our scan metric key, to personalize intensity.
+const CONCERN_TO_METRIC: Record<string, string> = {
+  acne: "acne",
+  wrinkle: "wrinkle",
+  pore: "pore",
+  redness: "redness",
+  dark_spot: "age_spot",
+  dark_circle: "dark_circle",
+  texture: "texture",
+};
+const GENERIC_INTENSITY = 0.8;
+const LOW_SCORE_CUTOFF = 85;
+
+/** Lower score → stronger simulated improvement, clamped to [0.3, 1]. */
+function improvementIntensity(score: number): number {
+  const raw = (LOW_SCORE_CUTOFF - score) / LOW_SCORE_CUTOFF;
+  return Math.min(1, Math.max(0.3, Number(raw.toFixed(2))));
+}
 
 const requestBody = z.object({
   image_url: z.string().url(),
@@ -72,6 +99,8 @@ const classificationResult = z.object({
     .regex(/^#[0-9a-fA-F]{6}$/)
     .nullable()
     .optional(),
+  product_name: z.string().nullable().optional().default(null),
+  key_actives: z.array(z.string()).optional().default([]),
   reasoning: z.string(),
 });
 
@@ -102,10 +131,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const classificationPrompt = `Classify this beauty product image as "makeup" or "skincare" (or "unknown" if uncertain).
 ${page_title ? `Page title: ${page_title}\n` : ""}${page_url ? `Page URL: ${page_url}\n` : ""}
 If makeup, pick one slot from: ${VALID_SLOTS.join(", ")}, and estimate the product's dominant color as hex "#RRGGBB" (the pigment color, not the packaging). Return color null if unclear.
-If skincare, pick 1-3 concerns from: ${VALID_CONCERNS.join(", ")}.
+If skincare, pick 1-3 concerns from: ${VALID_CONCERNS.join(", ")}, and list the likely key active ingredients (e.g. ["retinol"], ["niacinamide","zinc"]) as key_actives — empty array if unclear.
+Also read the product's name from the label or page title as product_name (null if unreadable).
 Always include a 1-sentence reasoning.`;
 
-    const classificationStricter = `Return ONLY JSON: {"classification":"makeup"|"skincare"|"unknown","slot"?:string,"concerns"?:string[],"color"?:string|null,"reasoning":string}.
+    const classificationStricter = `Return ONLY JSON: {"classification":"makeup"|"skincare"|"unknown","slot"?:string,"concerns"?:string[],"color"?:string|null,"product_name":string|null,"key_actives":string[],"reasoning":string}.
 If classification is "makeup", slot MUST be one of: ${VALID_SLOTS.join(", ")}, and color is the product pigment hex "#RRGGBB" or null.
 If classification is "skincare", concerns MUST be a subset of: ${VALID_CONCERNS.join(", ")}.
 Image is a product photo${page_title ? ` from page "${page_title}"` : ""}.`;
@@ -121,6 +151,8 @@ Image is a product photo${page_title ? ` from page "${page_title}"` : ""}.`;
           slot: { type: "STRING", nullable: true },
           concerns: { type: "ARRAY", items: { type: "STRING" } },
           color: { type: "STRING", nullable: true },
+          product_name: { type: "STRING", nullable: true },
+          key_actives: { type: "ARRAY", items: { type: "STRING" } },
           reasoning: { type: "STRING" },
         },
         required: ["classification", "reasoning"],
@@ -162,66 +194,167 @@ Image is a product photo${page_title ? ` from page "${page_title}"` : ""}.`;
       await normalizeForPC(rawSelfie, 1920);
     const selfieName = "selfie.jpg";
 
-    let resultUrl: string | null = null;
+    // Signed selfie URL so the panel can show a before|after grid.
+    let selfieSignedUrl: string | null = null;
+    {
+      const { data: signedData } = await supabase.storage
+        .from("selfies")
+        .createSignedUrl(profile.saved_selfie_url, 60 * 60);
+      selfieSignedUrl = signedData?.signedUrl ?? null;
+    }
 
-    try {
-      if (classified.classification === "makeup") {
-        const slot = classified.slot && SLOT_TO_LEGACY_EFFECT[classified.slot]
-          ? classified.slot
-          : null;
-        if (!slot) {
-          return jsonResponse({
-            data: {
-              classification: "makeup",
-              slot: classified.slot ?? null,
-              result_image_url: null,
-              reasoning: classified.reasoning,
-            },
-          });
-        }
+    let resultUrl: string | null = null;
+    let personalized = false;
+    let concernsMatched: string[] = [];
+    let concernsNotNeeded: string[] = [];
+    let clashes: ClashCheck["clashes"] = [];
+
+    if (classified.classification === "makeup") {
+      const slot = classified.slot && SLOT_TO_LEGACY_EFFECT[classified.slot]
+        ? classified.slot
+        : null;
+      if (!slot) {
+        return jsonResponse({
+          data: {
+            classification: "makeup",
+            slot: classified.slot ?? null,
+            product_name: classified.product_name,
+            result_image_url: null,
+            selfie_signed_url: selfieSignedUrl,
+            reasoning: classified.reasoning,
+          },
+        });
+      }
+      try {
         const effects = buildMakeupEffects(
           [{ slot, color: classified.color ?? null }],
           null,
         );
-        try {
-          resultUrl = await runPerfectCorpTask({
-            featureName: "makeup-vto",
-            bytes: selfieBytes,
-            contentType: selfieMime,
-            fileName: selfieName,
-            taskParams: { version: "1.0", effects },
-          });
-        } catch (vtoErr) {
-          console.warn("makeup-vto failed; falling back to legacy ai-makeup:", vtoErr);
-          resultUrl = await runPerfectCorpTask({
-            featureName: "ai-makeup",
-            bytes: selfieBytes,
-            contentType: selfieMime,
-            fileName: selfieName,
-            taskParams: {
-              params: { effect_list: [{ feature_name: SLOT_TO_LEGACY_EFFECT[slot] }] },
-            },
-          });
-        }
-      } else {
-        const concerns = (classified.concerns ?? []).filter((concern) =>
-          VALID_CONCERNS.includes(concern),
-        );
-        const simParams: Record<string, number> = {};
-        for (const concern of concerns) {
-          const param = CONCERN_TO_SIM_PARAM[concern];
-          if (param) simParams[param] = SIM_INTENSITY;
-        }
         resultUrl = await runPerfectCorpTask({
-          featureName: "skin-simulation",
+          featureName: "makeup-vto",
           bytes: selfieBytes,
           contentType: selfieMime,
           fileName: selfieName,
-          taskParams: simParams,
+          taskParams: { version: "1.0", effects },
         });
+      } catch (err) {
+        console.warn("makeup VTO failed (returning classification only):", err);
       }
-    } catch (err) {
-      console.warn("Perfect Corp call failed (returning classification only):", err);
+    } else {
+      const concerns = (classified.concerns ?? []).filter((concern) =>
+        VALID_CONCERNS.includes(concern),
+      );
+
+      // Personalize: intersect what the product targets with the user's
+      // actual latest scan. Concerns the user doesn't need get intensity 0
+      // and are reported honestly instead of rendered.
+      const { data: latestScan } = await supabase
+        .from("scans")
+        .select("metrics")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const metrics = (latestScan?.metrics ?? null) as
+        | Record<string, number>
+        | null;
+
+      const simParams: Record<string, number> = Object.fromEntries(
+        PC_SIM_KEYS.map((k) => [k, 0]),
+      );
+      for (const concern of concerns) {
+        const param = CONCERN_TO_SIM_PARAM[concern];
+        if (!param) continue;
+        if (metrics) {
+          const metricKey = CONCERN_TO_METRIC[concern];
+          const score = metricKey ? metrics[metricKey] : undefined;
+          if (typeof score === "number" && score < LOW_SCORE_CUTOFF) {
+            simParams[param] = improvementIntensity(score);
+            concernsMatched.push(concern);
+          } else {
+            concernsNotNeeded.push(concern);
+          }
+        } else {
+          simParams[param] = GENERIC_INTENSITY;
+          concernsMatched.push(concern);
+        }
+      }
+      personalized = !!metrics;
+
+      // Clash check against the routine, in parallel with the render.
+      const clashPromise = (async () => {
+        try {
+          let routineProducts: ClashRoutineProduct[] = [];
+          const { data: activeRoutine } = await supabase
+            .from("routines")
+            .select("id, routine_products(product_id)")
+            .eq("is_active", true)
+            .maybeSingle();
+          const routineIds = (
+            (activeRoutine?.routine_products ?? []) as Array<{ product_id: string }>
+          ).map((rp) => rp.product_id);
+          const query = supabase
+            .from("products")
+            .select("name, brand, ingredients")
+            .eq("category", "skincare");
+          const { data: prods } = routineIds.length > 0
+            ? await query.in("id", routineIds)
+            : await query;
+          routineProducts = (prods ?? []) as ClashRoutineProduct[];
+          if (routineProducts.length === 0) return [];
+
+          const webProduct = {
+            name: classified.product_name,
+            actives: classified.key_actives,
+            concerns,
+          };
+          const result = await callGeminiJson({
+            prompt: clashPrompt(webProduct, routineProducts),
+            retryPrompt: clashPromptStricter(webProduct, routineProducts),
+            geminiSchema: {
+              type: "OBJECT",
+              properties: {
+                clashes: {
+                  type: "ARRAY",
+                  items: {
+                    type: "OBJECT",
+                    properties: {
+                      with_product: { type: "STRING" },
+                      pair: { type: "STRING" },
+                      severity: { type: "STRING", enum: ["info", "caution", "avoid"] },
+                      note: { type: "STRING" },
+                    },
+                    required: ["with_product", "pair", "severity", "note"],
+                  },
+                },
+              },
+              required: ["clashes"],
+            },
+            validator: clashCheck,
+          });
+          return result.clashes;
+        } catch (err) {
+          console.warn("clash check failed (returning none):", err);
+          return [];
+        }
+      })();
+
+      const renderPromise = (async () => {
+        if (!Object.values(simParams).some((v) => v > 0)) return null;
+        try {
+          return await runPerfectCorpTask({
+            featureName: "skin-simulation",
+            bytes: selfieBytes,
+            contentType: selfieMime,
+            fileName: selfieName,
+            taskParams: simParams,
+          });
+        } catch (err) {
+          console.warn("skin simulation failed (returning classification only):", err);
+          return null;
+        }
+      })();
+
+      [clashes, resultUrl] = await Promise.all([clashPromise, renderPromise]);
     }
 
     return jsonResponse({
@@ -229,7 +362,14 @@ Image is a product photo${page_title ? ` from page "${page_title}"` : ""}.`;
         classification: classified.classification,
         slot: classified.slot ?? null,
         concerns: classified.concerns ?? [],
+        color: classified.color ?? null,
+        product_name: classified.product_name,
         result_image_url: resultUrl,
+        selfie_signed_url: selfieSignedUrl,
+        personalized,
+        concerns_matched: concernsMatched,
+        concerns_not_needed: concernsNotNeeded,
+        clashes,
         reasoning: classified.reasoning,
       },
     });
