@@ -30,8 +30,8 @@ flowchart LR
 | ![Scan results with 13 metrics](docs/images/scan.png) | ![Routine editor](docs/images/routines.png) | ![Side panel live lipstick try-on, before and after](docs/images/extension-tryon.png) |
 
 <p align="center">
-  <img src="docs/images/extension.png" width="300" alt="Side panel 4-week skincare preview with concern chips and clash check" /><br/>
-  <em>Extension: personalized 4-week skincare preview + clash check</em>
+  <img src="docs/images/extension-desktop.png" width="820" alt="Real NARS product page with the Lume side panel showing a live lipstick try-on" /><br/>
+  <em>The extension on a real product page: right-click a NARS lipstick → live try-on in the side panel</em>
 </p>
 
 ## What it does

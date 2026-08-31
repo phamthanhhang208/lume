@@ -15,6 +15,7 @@ README image grid links to them.
 | `steal-look.png` | `/look` | "the look \| on you" side-by-side after a steal, with the cast list below |
 | `extension.png` | Side panel | Skincare result: "you \| in 4 weeks" grid, concern chips, clash line |
 | `extension-tryon.png` | Side panel | Makeup result: "you \| with this shade" live try-on grid |
+| `extension-desktop.png` | Desktop composite | Real narscosmetics.com product page + side panel showing the live lipstick try-on (frame from the demo video) |
 
 Tips:
 

@@ -142,16 +142,19 @@ skin metrics, this verdict.
       `[https://lume-….vercel.app]`
 - [ ] **Novus.ai installed + dashboard screenshot** (required): screenshot
       of the Novus dashboard showing Lume traffic → attach as gallery image
-- [ ] **Demo video** (1:35, see `docs/video-script.md` — includes the
-      extension's live try-on + personalized preview): `[YouTube link]`
+- [ ] **Demo video** (1:39, desktop 1920×1080, see `docs/video-script.md`
+      — the extension section runs on the real NARS and The Ordinary
+      product pages with a live try-on + personalized preview):
+      `[YouTube link]`
 - [ ] **Repo link**: `[https://github.com/phamthanhhang208/lume]` (make
       public or add access note)
 - [ ] **Demo access for judges**: on `/sign-in`, click **"login as demo
       user"** — no credentials needed (account is pre-seeded with products,
       a scan, routines, verdicts, and looks)
 - [ ] Gallery images: dashboard, verdict + coverage chips, steal-a-look
-      side-by-side, extension before|after (`docs/images/extension.png`),
-      Novus dashboard
+      side-by-side, extension on a real retailer page
+      (`docs/images/extension-desktop.png`), extension before|after
+      (`docs/images/extension.png`), Novus dashboard
 - [ ] Post progress with **#EveryoneShipsNow** tagging **@MindTheProduct**
 - [ ] Perfect Corp quota sanity check (< 800/1000 units used) before final
       judge window
