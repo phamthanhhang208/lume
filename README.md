@@ -25,9 +25,14 @@ flowchart LR
 | --- | --- | --- |
 | ![Dashboard with product stickers](docs/images/dashboard.png) | ![Verdict screen with coverage chips](docs/images/verdict.png) | ![Reference look next to the transfer result](docs/images/steal-look.png) |
 
-| Skin scan | Routines | Extension |
+| Skin scan | Routines | Extension: live try-on |
 | --- | --- | --- |
-| ![Scan results with 13 metrics](docs/images/scan.png) | ![Routine editor](docs/images/routines.png) | ![Side panel try-on](docs/images/extension.png) |
+| ![Scan results with 13 metrics](docs/images/scan.png) | ![Routine editor](docs/images/routines.png) | ![Side panel live lipstick try-on, before and after](docs/images/extension-tryon.png) |
+
+<p align="center">
+  <img src="docs/images/extension.png" width="300" alt="Side panel 4-week skincare preview with concern chips and clash check" /><br/>
+  <em>Extension: personalized 4-week skincare preview + clash check</em>
+</p>
 
 ## What it does
 
@@ -37,7 +42,7 @@ flowchart LR
 - **Per-product verdict.** Gemini cross-references your skin metrics against each product's ingredients — aware of your Fitzpatrick type (photosensitivity, SPF weight) — and tags every product **works**, **neutral**, or **skip** with one sentence of reasoning anchored to a specific metric.
 - **Honest skin previews.** "Preview your skin in 4 weeks" simulates only the concerns your works-pile actually targets (Perfect Corp Skin Simulation) and tells you which low-scoring concerns your routine does *not* cover yet. A separate "fast forward" card runs AI Aging — labeled clearly as a generic simulation.
 - **Build or steal a look.** Describe a vibe ("soft glam date night") and Gemini casts your own makeup — real product colors inferred from shade names, contour/brow patterns matched to your analyzed face shape and brow shape, foundation matched to your skin tone — rendered by Perfect Corp Makeup VTO. Or upload any makeup photo and **Makeup Transfer** puts that look on your face, mapped to the products you own plus a list of gaps to shop.
-- **Chrome extension.** Right-click any image on the web: **Try with Lume** renders a product on your selfie (Makeup VTO or Skin Simulation); **Steal this look with Lume** transfers the photographed makeup onto you. Load-unpacked; see `extension/README.md`.
+- **Chrome extension: try before you buy, anywhere.** Right-click any product image on the web. Makeup → live virtual try-on: **you | with this shade**, your selfie next to the Perfect Corp Makeup VTO render. Skincare → a **4-week preview personalized to your latest scan** (Skin Simulation intensity scaled to your actual metric scores), with chips for what it helps and an honest "you don't need this" — Lume skips the render entirely when the product targets nothing on your radar. Every skincare product is also **clash-checked against your active routine** (retinoid × AHA and friends, severity-ranked). **Steal this look with Lume** transfers the photographed makeup onto you. Load-unpacked; see `extension/README.md`.
 
 ## Architecture
 

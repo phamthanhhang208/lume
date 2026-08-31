@@ -53,9 +53,16 @@ skin metrics, this verdict.
   foundation matched to your skin tone — rendered by Perfect Corp Makeup
   VTO. Or upload any makeup photo and **Makeup Transfer** puts that look on
   your face, mapped to the products you own plus a shopping list of gaps.
-- **Chrome extension.** Right-click any image on the web: "Try with Lume"
-  renders a product on your selfie; "Steal this look with Lume" transfers
-  the makeup in the photo onto you.
+- **Chrome extension: try before you buy, anywhere.** Right-click any
+  product image on the web. Makeup → live virtual try-on: **you | with
+  this shade**, your selfie next to the Perfect Corp render. Skincare →
+  a **4-week preview personalized to your latest scan**: intensity scaled
+  to your actual metric scores, green chips for the concerns it helps,
+  and an honest "you don't need this" when it targets concerns you don't
+  have (Lume then skips the render entirely). Every skincare product is
+  also **clash-checked against your active routine** — severity-ranked
+  warnings like retinoid × AHA before it ever reaches your shelf. "Steal
+  this look with Lume" transfers the makeup in any photo onto you.
 
 ## How we built it
 
@@ -70,8 +77,9 @@ skin metrics, this verdict.
   payload), Makeup Transfer, AI Aging, Photo Enhance, Background Removal.
 - **Google Gemini 2.5 Flash:** vision OCR (labels + product fronts),
   verdict reasoning, look orchestration with per-product color inference,
-  routine-coverage analysis, grounded web search for ingredients — every
-  call Zod-validated with a stricter retry and a soft-fail path.
+  routine-coverage analysis, ingredient clash-checking, grounded web
+  search for ingredients — every call Zod-validated with a stricter
+  retry and a soft-fail path.
 - **Open Beauty Facts** for structured ingredient lookup.
 - **Novus.ai** auto-instrumented from the repo, so we shipped with product
   analytics flowing from day one.
@@ -113,10 +121,11 @@ skin metrics, this verdict.
 
 ## What's next for Lume
 
-- Personalized extension previews (intersect a product's claims with your
-  actual low metrics — "this serum could help *your* redness").
-- Ingredient conflict checker across a routine (retinol + AHA warnings).
-- Scan timeline with metric trends per routine.
+- Scan timeline with metric trends per routine — did the 4-week preview
+  come true?
+- Clash checking at routine-build time (not just from the extension).
+- Price-aware advice: "your money might do more elsewhere" with an actual
+  cheaper alternative.
 - Chrome Web Store release.
 
 ## Built with
@@ -133,14 +142,16 @@ skin metrics, this verdict.
       `[https://lume-….vercel.app]`
 - [ ] **Novus.ai installed + dashboard screenshot** (required): screenshot
       of the Novus dashboard showing Lume traffic → attach as gallery image
-- [ ] **Demo video** (~3 min, see `docs/video-script.md`): `[YouTube link]`
+- [ ] **Demo video** (1:35, see `docs/video-script.md` — includes the
+      extension's live try-on + personalized preview): `[YouTube link]`
 - [ ] **Repo link**: `[https://github.com/phamthanhhang208/lume]` (make
       public or add access note)
 - [ ] **Demo access for judges**: on `/sign-in`, click **"login as demo
       user"** — no credentials needed (account is pre-seeded with products,
       a scan, routines, verdicts, and looks)
 - [ ] Gallery images: dashboard, verdict + coverage chips, steal-a-look
-      side-by-side, extension side panel, Novus dashboard
+      side-by-side, extension before|after (`docs/images/extension.png`),
+      Novus dashboard
 - [ ] Post progress with **#EveryoneShipsNow** tagging **@MindTheProduct**
 - [ ] Perfect Corp quota sanity check (< 800/1000 units used) before final
       judge window

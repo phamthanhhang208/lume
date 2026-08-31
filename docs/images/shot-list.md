@@ -13,7 +13,8 @@ README image grid links to them.
 | `routines.png` | `/routines` | "everyday" routine expanded, several products checked, ACTIVE badge visible |
 | `verdict.png` | `/verdict` | Verdict cards + the 4-week preview rendered with coverage chips ("routine covers / not covered yet") in frame |
 | `steal-look.png` | `/look` | "the look \| on you" side-by-side after a steal, with the cast list below |
-| `extension.png` | Any retailer page | Side panel open with a try-on result (crop to browser window incl. the page) |
+| `extension.png` | Side panel | Skincare result: "you \| in 4 weeks" grid, concern chips, clash line |
+| `extension-tryon.png` | Side panel | Makeup result: "you \| with this shade" live try-on grid |
 
 Tips:
 
