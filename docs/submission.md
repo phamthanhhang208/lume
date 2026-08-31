@@ -22,6 +22,11 @@ else's face. We wanted the opposite: point the camera at your own face and
 your own shelf, and let AI connect the two — this ingredient list, these
 skin metrics, this verdict.
 
+We shipped v1 of Lume once already. Then we kept shipping — this
+submission is **v2** (the chip next to the wordmark means it), and the
+biggest lesson of the theme is baked into the product: shipping is a
+loop, not an event.
+
 ## What it does
 
 - **Add a product with two photos.** Front photo: background removed
@@ -62,7 +67,29 @@ skin metrics, this verdict.
   have (Lume then skips the render entirely). Every skincare product is
   also **clash-checked against your active routine** — severity-ranked
   warnings like retinoid × AHA before it ever reaches your shelf. "Steal
-  this look with Lume" transfers the makeup in any photo onto you.
+  this look with Lume" transfers the makeup in any photo onto you. (The
+  demo video runs all of this live on real narscosmetics.com and
+  theordinary.com product pages.)
+
+## What's new in v2
+
+Everything below shipped after our first submission:
+
+- **Routines.** Named routines with an active one; the verdict grades
+  what you actually use, not your whole shelf.
+- **Six more Perfect Corp features** (4 → 10): Facial Color Tones,
+  Fitzpatrick Skin Type, Face Attributes, Makeup Transfer, AI Aging,
+  Photo Enhance.
+- **Face intelligence in every prompt.** Skin tone drives foundation
+  shade checks and VTO skin color; face/brow shape drive contour and
+  brow patterns; Fitzpatrick type informs verdicts. Data we used to
+  store and ignore now works for the user.
+- **The Chrome extension** — entirely new: live virtual try-on with a
+  before|after, a 4-week skincare preview personalized to your latest
+  scan, ingredient clash warnings against your active routine, and
+  steal-a-look from any photo on the web.
+- **Routine-conditioned 4-week preview** with a product picker — simulate
+  the routine you're committing to, not a generic best case.
 
 ## How we built it
 
@@ -146,7 +173,7 @@ skin metrics, this verdict.
       — the extension section runs on the real NARS and The Ordinary
       product pages with a live try-on + personalized preview):
       `[YouTube link]`
-- [ ] **Repo link**: `[https://github.com/phamthanhhang208/lume]` (make
+- [ ] **Repo link**: https://github.com/phamthanhhang208/lume (make
       public or add access note)
 - [ ] **Demo access for judges**: on `/sign-in`, click **"login as demo
       user"** — no credentials needed (account is pre-seeded with products,
